@@ -1,0 +1,10 @@
+[flake8]
+# W191 - indentation contains tabs
+# E401 - multiple imports on one line
+# E223 - tab before operator
+# E231 - missing whitespace after ','
+# E265 - block comment should start with '# '
+# E261 - at least two spaces before inline comment
+# E242 - tab after ':'
+ignore = W191,E401,E223,E231,E265,E261,E242
+max-line-length = 120
