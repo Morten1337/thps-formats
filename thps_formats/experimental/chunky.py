@@ -164,9 +164,9 @@ def Chunky(filename):
 	pathname = Path(filename).resolve()
 
 	with open(pathname, 'rb') as inp:
-
+		# create an an instance of our reader class
 		br = BinaryReader(inp)
-		print('stream type: ', type(br.stream))
+
 		# go to the end of the stream to get the total file size
 		br.stream.seek(0, os.SEEK_END)
 		filesize = br.stream.tell()
