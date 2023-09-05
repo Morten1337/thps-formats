@@ -1,2 +1,3 @@
 from . bsp import BSP
-__all__ = [BSP]
+from . chunky import Chunky
+__all__ = [BSP, Chunky]

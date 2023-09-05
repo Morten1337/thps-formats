@@ -1,10 +1,14 @@
+import io
 import struct
 
 
 class BinaryReader(object):
 
 	def __init__(self, stream):
-		self.stream = stream
+		if isinstance(stream, bytes):
+			self.stream = io.BytesIO(stream)
+		else:
+			self.stream = stream
 
 	def unpack(self, fmt, length=1):
 		return struct.unpack(fmt, self.stream.read(length))[0]
@@ -25,7 +29,7 @@ class BinaryReader(object):
 		return self.unpack('c')
 
 	def read_character(self, size=1, encoding='utf-8'):
-		return self.ReadBytes(size).decode(encoding)
+		return self.read_bytes(size).decode(encoding)
 
 	def read_float(self, endian='<'):
 		return self.unpack(f'{endian}f', 4)
