@@ -5,6 +5,16 @@ from thps_formats.utils.reader import BinaryReader
 
 
 # -------------------------------------------------------------------------------------------------
+def get_number_of_chunks_by_type(chunks, chunk_type):
+	return sum(1 for chunk in chunks if chunk.get_type() == chunk_type)
+
+
+# -------------------------------------------------------------------------------------------------
+def get_all_chunks_of_type(chunks, chunk_type):
+	return [chunk for chunk in chunks if chunk.get_type() == chunk_type]
+
+
+# -------------------------------------------------------------------------------------------------
 # https://gtamods.com/wiki/List_of_RW_section_IDs
 class ChunkType(Enum):
 
@@ -39,9 +49,6 @@ class ChunkType(Enum):
 	CollisionTHPS		= 0x000001AF
 
 
-_root = []
-
-
 def read_chunk(br):
 
 	chunk = Chunk().read(br)
@@ -53,6 +60,9 @@ def read_chunk(br):
 
 	elif chunk.get_type() == ChunkType.MaterialList:
 		return MaterialListChunk(chunk).read(br)
+
+	elif chunk.get_type() == ChunkType.Material:
+		return MaterialChunk(chunk).read(br)
 
 	elif chunk.get_type() == ChunkType.World:
 		return WorldChunk(chunk).read(br)
@@ -96,8 +106,24 @@ class Chunk(object):
 		return self.start
 
 
-# generic
+# generic data
 class StructChunk(Chunk):
+
+	data = None # @tmp
+
+	def __init__(self, base):
+		super().__init__()
+		self.__dict__.update(base.__dict__)
+
+	def read(self, br):
+		self.data = br.read_bytes(self.size)
+		return self
+
+
+# material
+class MaterialChunk(Chunk):
+
+	data = None # @tmp
 
 	def __init__(self, base):
 		super().__init__()
@@ -111,33 +137,52 @@ class StructChunk(Chunk):
 # Material List
 class MaterialListChunk(Chunk):
 
-	def __init__(self, base):
-		super().__init__()
-		self.__dict__.update(base.__dict__)
-
-	def read(self, br):
-		br.stream.seek(self.size, os.SEEK_CUR) # @todo
-		return self
-
-
-# bsp root
-class WorldChunk(Chunk):
+	num_materials = -1 # @tmp
 
 	def __init__(self, base):
 		super().__init__()
 		self.__dict__.update(base.__dict__)
 
 	def read(self, br):
-		print('Reading WorldChunk with size ', self.size)
 
 		struct = read_chunk(br)
 		assert struct.get_type() == ChunkType.Struct
 		self.chunks.append(struct)
 		
 		parser = BinaryReader(struct.data)
-		parser.stream.seek(48, os.SEEK_CUR) # @todo, skippin 30 bytes
+		self.num_materials = parser.read_uint32()
+		assert self.num_materials == 255 # @testing, ap.bsp
+		parser.seek(self.num_materials * 4, os.SEEK_CUR) # @note, skip the junk
+
+		while (br.stream.tell() < self.start + self.size):
+			material = read_chunk(br)
+			assert material.get_type() == ChunkType.Material
+			self.chunks.append(material) # should just be material chunks now
+
+		assert get_number_of_chunks_by_type(self.chunks, ChunkType.Material) == self.num_materials
+
+		return self
+
+
+# bsp root
+class WorldChunk(Chunk):
+
+	world_flag = -1
+
+	def __init__(self, base):
+		super().__init__()
+		self.__dict__.update(base.__dict__)
+
+	def read(self, br):
+
+		struct = read_chunk(br)
+		assert struct.get_type() == ChunkType.Struct
+		self.chunks.append(struct)
+		
+		parser = BinaryReader(struct.data)
+		parser.seek(48, os.SEEK_CUR) # @todo, skippin 30 bytes
 		self.world_flag = parser.read_uint32()
-		assert self.world_flag == 0x400200c9 # @testing
+		assert self.world_flag == 0x400200c9 # @testing, ap.bsp
 
 		matlist = read_chunk(br)
 		assert matlist.get_type() == ChunkType.MaterialList
@@ -164,14 +209,11 @@ def Chunky(filename):
 	pathname = Path(filename).resolve()
 
 	with open(pathname, 'rb') as inp:
+
 		# create an an instance of our reader class
 		br = BinaryReader(inp)
 
-		# go to the end of the stream to get the total file size
-		br.stream.seek(0, os.SEEK_END)
-		filesize = br.stream.tell()
-		br.stream.seek(0, os.SEEK_SET)
-
 		root = read_chunk(br)
-		print('root type is', root.get_type())
 		assert root.get_type() == ChunkType.World
+
+		return root

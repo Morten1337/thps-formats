@@ -1,3 +1,4 @@
+import os
 import io
 import struct
 
@@ -9,6 +10,9 @@ class BinaryReader(object):
 			self.stream = io.BytesIO(stream)
 		else:
 			self.stream = stream
+
+	def seek(self, offset, whence=os.SEEK_SET):
+		return self.stream.seek(offset, whence)
 
 	def unpack(self, fmt, length=1):
 		return struct.unpack(fmt, self.stream.read(length))[0]
