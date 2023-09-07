@@ -5,13 +5,18 @@ from thps_formats.utils.reader import BinaryReader
 
 
 # -------------------------------------------------------------------------------------------------
-def get_number_of_chunks_by_type(chunks, chunk_type):
+def count_chunks_of_type(chunks, chunk_type):
 	return sum(1 for chunk in chunks if chunk.get_type() == chunk_type)
 
 
 # -------------------------------------------------------------------------------------------------
-def get_all_chunks_of_type(chunks, chunk_type):
+def find_chunks_by_type(chunks, chunk_type):
 	return [chunk for chunk in chunks if chunk.get_type() == chunk_type]
+
+
+# -------------------------------------------------------------------------------------------------
+def find_first_chunk_of_type(chunks, chunk_type):
+	return next((chunk for chunk in chunks if chunk.get_type() == chunk_type), None)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -47,6 +52,8 @@ class ChunkType(Enum):
 	MaterialEffects		= 0x00000120
 	Collision			= 0x0000011D
 	CollisionTHPS		= 0x000001AF
+	BinMesh				= 0x0000050E # faceset/mesh/matsplit
+	CollisionFaceFlag	= 0x0294AF01 # thps3 extension
 
 
 def read_chunk(br):
@@ -71,6 +78,7 @@ def read_chunk(br):
 		return ClumpChunk(chunk).read(br)
 
 	else:
+		#raise NotImplementedError(f'Unhandled Chunk type {chunk.get_type()}')
 		print(f'skipping unknown chunk type {chunk.get_type()} with size {chunk.get_size()} at {chunk.get_start()}...')
 		chunk.data = br.read_bytes(chunk.get_size())
 		return chunk
@@ -159,7 +167,7 @@ class MaterialListChunk(Chunk):
 			assert material.get_type() == ChunkType.Material
 			self.chunks.append(material) # should just be material chunks now
 
-		assert get_number_of_chunks_by_type(self.chunks, ChunkType.Material) == self.num_materials
+		assert count_chunks_of_type(self.chunks, ChunkType.Material) == self.num_materials
 
 		return self
 
@@ -184,11 +192,11 @@ class WorldChunk(Chunk):
 		self.world_flag = parser.read_uint32()
 		assert self.world_flag == 0x400200c9 # @testing, ap.bsp
 
-		matlist = read_chunk(br)
-		assert matlist.get_type() == ChunkType.MaterialList
+		#matlist = read_chunk(br)
+		#assert matlist.get_type() == ChunkType.MaterialList
 
-		#while (br.stream.tell() < self.start + self.size):
-		#	self.chunks.append(read_chunk(br))
+		while (br.stream.tell() < self.start + self.size):
+			self.chunks.append(read_chunk(br))
 
 		return self
 
@@ -204,6 +212,26 @@ class ClumpChunk(Chunk):
 		return self
 
 
+def to_collision(root, filename):
+	pass
+
+
+def to_scene(root, filename):
+
+	def handle_materials(root):
+		container = find_first_chunk_of_type(root.chunks, ChunkType.MaterialList)
+		materials = find_chunks_by_type(container.chunks, ChunkType.Material)
+	#	print(container)
+	#	print(materials)
+
+	def handle_objects(root):
+		pass
+
+	handle_materials(root)
+	handle_objects(root)
+	pass
+
+
 def Chunky(filename):
 
 	pathname = Path(filename).resolve()
@@ -215,5 +243,7 @@ def Chunky(filename):
 
 		root = read_chunk(br)
 		assert root.get_type() == ChunkType.World
+
+		to_scene(root, 'ap.scn.xbx')
 
 		return root
