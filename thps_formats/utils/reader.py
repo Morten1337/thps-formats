@@ -38,6 +38,12 @@ class BinaryReader(object):
 	def read_float(self, endian='<'):
 		return self.unpack(f'{endian}f', 4)
 
+	def read_vec2(self, endian='<'):
+		return [self.read_float() for _ in range(2)]
+
+	def read_vec3(self, endian='<'):
+		return [self.read_float() for _ in range(3)]
+
 	def read_double(self, endian='<'):
 		return self.unpack(f'{endian}d', 8)
 
