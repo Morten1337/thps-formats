@@ -77,14 +77,18 @@ class ChunkType(Enum):
 	Image				= 0x00000018
 	SkinAnimation		= 0x00000019
 	GeometryList		= 0x0000001A # A container for a list of geometries.
+
 	# @todo ...
+	MorphPLG			= 0x00000105 # The Morph plugin is a extension of the Geometry section and is rarely used...
+
 	MaterialEffects		= 0x00000120
 	Collision			= 0x0000011D
 	CollisionTHPS		= 0x000001AF # thps3 PLG
 	BinMesh				= 0x0000050E # faceset/mesh/matsplit
 
 	ExtensionTHPS		= 0x0294AF01 # thps3 extension
-	Unknown1			= 0x0294AF04 # thps3 extension
+	ExtensionUnk02		= 0x0294AF02 # thps3 extension
+	ExtensionUnk04		= 0x0294AF04 # thps3 extension (dff)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -97,7 +101,7 @@ def process_chunk(br, parent=None):
 	# handle struct chunks and de-serialize them
 	if chunk.get_type() == ChunkType.Struct:
 		chunk.raw = br.read_bytes(chunk.get_size())
-		process_chunk_struct(chunk, parent)
+		deserialize_chunk_struct(chunk, parent)
 
 	# handle strings separately... @todo: unicode strings
 	elif chunk.get_type() == ChunkType.String:
@@ -112,19 +116,22 @@ def process_chunk(br, parent=None):
 	# handle remaining chunks... @todo: de-serialize
 	else:
 		# ----------------------------------------
-		br.seek(8, os.SEEK_CUR)
-		tmp_version = br.read_uint32()
-		assert tmp_version != 0x00000310
-		br.seek(-12, os.SEEK_CUR)
+		if chunk.get_size() > 12:
+			br.seek(8, os.SEEK_CUR)
+			tmp_version = br.read_uint32()
+			#assert tmp_version != 0x00000310
+			if tmp_version == 0x00000310:
+				raise NotImplementedError(f'Unhandled container Chunk {chunk.get_type()}')
+			br.seek(-12, os.SEEK_CUR)
 		# ----------------------------------------
 		chunk.raw = br.read_bytes(chunk.get_size())
-		process_chunk_data(chunk, parent)
+		deserialize_chunk_data(chunk, parent)
 
 	return chunk
 
 
 # -------------------------------------------------------------------------------------------------
-def process_chunk_data(chunk, parent):
+def deserialize_chunk_data(chunk, parent):
 	parser = BinaryReader(chunk.raw)
 	if chunk.get_type() == ChunkType.BinMesh:
 		chunk.data = BinMeshData(parser)
@@ -148,7 +155,7 @@ def process_chunk_data(chunk, parent):
 
 
 # -------------------------------------------------------------------------------------------------
-def process_chunk_struct(chunk, parent):
+def deserialize_chunk_struct(chunk, parent):
 	parser = BinaryReader(chunk.raw)
 	if parent.get_type() == ChunkType.World:
 		chunk.struct = WorldStruct(parser)
@@ -278,7 +285,7 @@ class MaterialListStruct(Struct):
 	def __init__(self, br):
 		super().__init__()
 		self.num_materials = br.read_uint32()
-		assert self.num_materials == 255 # @testing, ap.bsp
+		#assert self.num_materials == 255 # @testing, ap.bsp
 		# skipping the material instance stuff
 		br.seek(self.num_materials * 4, os.SEEK_CUR)
 
@@ -372,13 +379,21 @@ class Chunk(object):
 	# whether this chunk contains other chunks
 	def is_container(self):
 		return (self.type in [
+			# ----- common -----
 			ChunkType.Extension,
 			ChunkType.MaterialList,
 			ChunkType.Material,
 			ChunkType.Texture,
+			# ----- bsp ----- 
+			ChunkType.World,
 			ChunkType.PlaneSection,
 			ChunkType.AtomicSection,
-			ChunkType.World,
+			# ----- dff -----
+			ChunkType.Clump,
+			ChunkType.FrameList,
+			ChunkType.GeometryList,
+			ChunkType.Geometry,
+			ChunkType.Atomic,
 		])
 
 	# 
@@ -434,8 +449,8 @@ def to_scene(root, filename):
 		json.dump(root.toJSON(), out, indent=4)
 
 	# -- debug
-	with open('./tests/data/ap-atomics.json', 'w') as out:
-		json.dump([chunk.toJSON() for chunk in atomics], out, indent=4)
+	#with open('./tests/data/ap-atomics.json', 'w') as out:
+	#	json.dump([chunk.toJSON() for chunk in atomics], out, indent=4)
 
 	def handle_materials(root):
 		container = find_first_chunk_of_type(root.chunks, ChunkType.MaterialList)
@@ -465,14 +480,38 @@ sys.setrecursionlimit(2048 * 2)
 def Chunky(filename):
 
 	pathname = Path(filename).resolve()
+	extension = pathname.suffix.lower().strip('.')
+	scenename = pathname.stem.lower()
 	with open(pathname, 'rb') as inp:
 
 		# create an an instance of our reader class
 		br = BinaryReader(inp)
 
-		root = process_chunk(br, None)
-		assert root.get_type() == ChunkType.World
+		# go to the end of the stream to get the total file size
+		br.stream.seek(0, os.SEEK_END)
+		filesize = br.stream.tell()
+		br.stream.seek(0, os.SEEK_SET)
 
-		to_scene(root, 'ap.scn.xbx')
+		print('filesize', filesize)
 
-		return root
+		# separate tests for bsp files
+		if extension == 'bsp':
+			root = process_chunk(br, None)
+			assert root.get_type() == ChunkType.World
+			to_scene(root, 'ap.scn.xbx')
+			return root
+
+		# separate tests for dff files
+		elif extension == 'dff':
+
+			chunks = []
+			while (br.stream.tell() < filesize):
+				chunks.append(process_chunk(br, None))
+			assert chunks[0].get_type() == ChunkType.Clump
+
+			# -- debug
+			with open(f'./tests/data/{scenename}-dff.json', 'w') as out:
+				json.dump([chunk.toJSON() for chunk in chunks], out, indent=4)
+			return chunks
+
+		return None
