@@ -11,6 +11,11 @@ TMP = {'world_flags': 0} # @tmp hack
 
 
 # -------------------------------------------------------------------------------------------------
+def tohex(val, nbits):
+	return hex((val + (1 << nbits)) % (1 << nbits))
+
+
+# -------------------------------------------------------------------------------------------------
 def count_chunks_of_type(chunks, chunk_type):
 	return sum(1 for chunk in chunks if chunk.get_type() == chunk_type)
 
@@ -78,7 +83,7 @@ class ChunkType(Enum):
 	CollisionTHPS		= 0x000001AF # thps3 PLG
 	BinMesh				= 0x0000050E # faceset/mesh/matsplit
 
-	CollisionFaceFlag	= 0x0294AF01 # thps3 extension
+	ExtensionTHPS		= 0x0294AF01 # thps3 extension
 	Unknown1			= 0x0294AF04 # thps3 extension
 
 
@@ -91,22 +96,8 @@ def process_chunk(br, parent=None):
 
 	# handle struct chunks and de-serialize them
 	if chunk.get_type() == ChunkType.Struct:
-
 		chunk.raw = br.read_bytes(chunk.get_size())
-		parser = BinaryReader(chunk.raw)
-		if parent.get_type() == ChunkType.World:
-			chunk.struct = WorldStruct(parser)
-		elif parent.get_type() == ChunkType.MaterialList:
-			chunk.struct = MaterialListStruct(parser)
-		elif parent.get_type() == ChunkType.AtomicSection:
-			chunk.struct = AtomicSectionStruct(parser)
-		elif parent.get_type() == ChunkType.PlaneSection:
-			# ehh, we just discard this later anyways...
-			# as we're only interested in the atomic sections 
-			pass
-		else:
-			#raise NotImplementedError(f'Unhandled Struct for {parent.get_type()}')
-			print(f'Skip parsing struct for {parent.get_type()} with size {chunk.get_size()} at {chunk.get_start()}...')
+		process_chunk_struct(chunk, parent)
 
 	# handle strings separately... @todo: unicode strings
 	elif chunk.get_type() == ChunkType.String:
@@ -115,14 +106,67 @@ def process_chunk(br, parent=None):
 	# handle nested chunks
 	elif chunk.is_container():
 		while (br.stream.tell() < chunk.get_start() + chunk.get_size()):
-			tmp = process_chunk(br, chunk)
+			tmp = process_chunk(br, parent=chunk)
 			chunk.chunks.append(tmp)
 
 	# handle remaining chunks... @todo: de-serialize
 	else:
+		# ----------------------------------------
+		br.seek(8, os.SEEK_CUR)
+		tmp_version = br.read_uint32()
+		assert tmp_version != 0x00000310
+		br.seek(-12, os.SEEK_CUR)
+		# ----------------------------------------
 		chunk.raw = br.read_bytes(chunk.get_size())
+		process_chunk_data(chunk, parent)
 
 	return chunk
+
+
+# -------------------------------------------------------------------------------------------------
+def process_chunk_data(chunk, parent):
+	parser = BinaryReader(chunk.raw)
+	if chunk.get_type() == ChunkType.BinMesh:
+		chunk.data = BinMeshData(parser)
+	elif chunk.get_type() == ChunkType.Collision:
+		chunk.data = CollisionData(parser)
+	elif chunk.get_type() == ChunkType.MaterialEffects:
+		chunk.data = MaterialEffectsData(parser)
+	elif chunk.get_type() == ChunkType.ExtensionTHPS:
+		if parent.get_parent().get_type() == ChunkType.AtomicSection:
+			chunk.data = AtomicSectionExtensionData(parser, parent)
+		elif parent.get_parent().get_type() == ChunkType.Material:
+			chunk.data = MaterialExtensionData(parser, parent)
+		elif parent.get_parent().get_type() == ChunkType.Texture:
+			chunk.data = TextureExtensionData(parser, parent)
+		else:
+			print(f'Got THPS3 Extension but parent type is {parent.get_parent().get_type()}...')
+			pass
+	else:
+		#raise NotImplementedError(f'Unhandled Data for {chunk.get_type()}')
+		print(f'Skip parsing data for {chunk.get_type()} with size {chunk.get_size()} at {chunk.get_start()}...')
+
+
+# -------------------------------------------------------------------------------------------------
+def process_chunk_struct(chunk, parent):
+	parser = BinaryReader(chunk.raw)
+	if parent.get_type() == ChunkType.World:
+		chunk.struct = WorldStruct(parser)
+	elif parent.get_type() == ChunkType.MaterialList:
+		chunk.struct = MaterialListStruct(parser)
+	elif parent.get_type() == ChunkType.Material:
+		chunk.struct = MaterialStruct(parser)
+	elif parent.get_type() == ChunkType.Texture:
+		chunk.struct = TextureStruct(parser)
+	elif parent.get_type() == ChunkType.AtomicSection:
+		chunk.struct = AtomicSectionStruct(parser)
+	elif parent.get_type() == ChunkType.PlaneSection:
+		# ehh, we just discard this later anyways...
+		# as we're only interested in the atomic sections 
+		pass
+	else:
+		#raise NotImplementedError(f'Unhandled Struct for {parent.get_type()}')
+		print(f'Skip parsing struct for {parent.get_type()} with size {chunk.get_size()} at {chunk.get_start()}...')
 
 
 # -------------------------------------------------------------------------------------------------
@@ -132,6 +176,82 @@ class Struct(object):
 		for attr, value in self.__dict__.items():
 			result[attr] = value
 		return result
+
+
+# -------------------------------------------------------------------------------------------------
+class BinMeshData(Struct):
+	def __init__(self, br):
+		super().__init__()
+		self.face_type = br.read_uint32()
+		self.num_splits = br.read_uint32()
+		self.total_num_indices = br.read_uint32()
+		self.splits = []
+		for _ in range(self.num_splits):
+			split = {}
+			split['num_indices'] = br.read_uint32()
+			split['material_index'] = br.read_uint32()
+			split['indices'] = [br.read_uint32() for _ in range(split['num_indices'])]
+			self.splits.append(split)
+
+
+# -------------------------------------------------------------------------------------------------
+class CollisionData(Struct):
+
+	def __init__(self, br):
+		super().__init__()
+		pass
+
+
+# -------------------------------------------------------------------------------------------------
+class MaterialEffectsData(Struct):
+
+	def __init__(self, br):
+		super().__init__()
+		pass
+
+
+# -------------------------------------------------------------------------------------------------
+class AtomicSectionExtensionData(Struct):
+
+	# @note: maybe pass the chunk instead, and get the parent from that?
+	def __init__(self, br, parent):
+		super().__init__()
+		assert parent.get_type() == ChunkType.Extension
+		assert parent.get_parent().get_type() == ChunkType.AtomicSection
+		assert parent.get_parent().get_child_struct() is not None
+		num_faces = parent.get_parent().get_child_struct().num_faces
+		self.padding = br.read_uint32() # @todo: idk always 6??
+		assert self.padding == 6
+		self.flags = [br.read_uint16() for _ in range(num_faces)]
+		self.unkXX = br.read_uint32() # @todo
+		#assert self.unkXX == 0
+		self.name = br.read_uint32() # sector checksum name
+		self._name = str(tohex(self.name, 32))
+		br.seek(self.padding, os.SEEK_CUR) # padding?
+
+
+# -------------------------------------------------------------------------------------------------
+class MaterialExtensionData(Struct):
+
+	# @note: maybe pass the chunk instead, and get the parent from that?
+	def __init__(self, br, parent):
+		super().__init__()
+		assert parent.get_type() == ChunkType.Extension
+		assert parent.get_parent().get_type() == ChunkType.Material
+		assert parent.get_parent().get_child_struct() is not None
+		pass
+
+
+# -------------------------------------------------------------------------------------------------
+class TextureExtensionData(Struct):
+
+	# @note: maybe pass the chunk instead, and get the parent from that?
+	def __init__(self, br, parent):
+		super().__init__()
+		assert parent.get_type() == ChunkType.Extension
+		assert parent.get_parent().get_type() == ChunkType.Texture
+		assert parent.get_parent().get_child_struct() is not None
+		pass
 
 
 # -------------------------------------------------------------------------------------------------
@@ -164,6 +284,21 @@ class MaterialListStruct(Struct):
 
 
 # -------------------------------------------------------------------------------------------------
+class MaterialStruct(Struct):
+	def __init__(self, br):
+		super().__init__()
+		pass # @todo
+
+
+# -------------------------------------------------------------------------------------------------
+class TextureStruct(Struct):
+	def __init__(self, br):
+		super().__init__()
+		# @note: will contain texture flags, but if texture is in tdx those flags are overriden by tdx texflags - vadru
+		self.flags = br.read_uint32()
+
+
+# -------------------------------------------------------------------------------------------------
 class AtomicSectionStruct(Struct):
 	def __init__(self, br):
 		super().__init__()
@@ -193,6 +328,7 @@ class Chunk(object):
 		For de-serialized the MaterialList Struct-chunk
 	"""
 	raw = None
+	data = None
 	struct = None
 	string = None
 
@@ -225,6 +361,9 @@ class Chunk(object):
 			result['raw'] = self.raw.hex()
 		elif self.type == ChunkType.String:
 			result['string'] = str(self.string)
+		elif self.data is not None:
+			result['data'] = self.data.toJSON()
+			result['raw'] = self.raw.hex()
 		elif self.raw is not None:
 			result['raw'] = self.raw.hex()
 
@@ -241,6 +380,12 @@ class Chunk(object):
 			ChunkType.AtomicSection,
 			ChunkType.World,
 		])
+
+	# 
+	def get_child_struct(self):
+		if len(self.chunks) > 0:
+			return find_first_chunk_of_type(self.chunks, ChunkType.Struct).struct
+		return None
 
 	# 
 	def get_parent(self):
