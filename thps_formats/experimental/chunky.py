@@ -7,7 +7,7 @@ from thps_formats.utils.reader import BinaryReader
 
 
 # -------------------------------------------------------------------------------------------------
-TMP = {'world_flags': 0} # @tmp hack
+WORLD_GLOBAL = {'flags': 0} # @tmp hack
 
 
 # -------------------------------------------------------------------------------------------------
@@ -46,6 +46,14 @@ class WorldFlags(IntEnum):
 	FLAGS_MASK = 0x000000FF
 	NATIVE_FLAGS_MASK = 0x0F000000
 	SECTORS_OVERLAP = 0x40000000
+
+
+# -------------------------------------------------------------------------------------------------
+class AtomicFlags(IntEnum):
+	NONE = 0x00000000
+	COLLISION = 0x00000001
+	RENDER = 0x00000004
+	COLLISION_AND_RENDER = 0x00000004
 
 
 # -------------------------------------------------------------------------------------------------
@@ -163,10 +171,20 @@ def deserialize_chunk_struct(chunk, parent):
 		chunk.struct = MaterialListStruct(parser)
 	elif parent.get_type() == ChunkType.Material:
 		chunk.struct = MaterialStruct(parser)
+	elif parent.get_type() == ChunkType.Atomic:
+		chunk.struct = AtomicStruct(parser)
+	elif parent.get_type() == ChunkType.GeometryList:
+		chunk.struct = GeometryListStruct(parser)
+	elif parent.get_type() == ChunkType.Geometry:
+		chunk.struct = GeometryStruct(parser)
 	elif parent.get_type() == ChunkType.Texture:
 		chunk.struct = TextureStruct(parser)
 	elif parent.get_type() == ChunkType.AtomicSection:
 		chunk.struct = AtomicSectionStruct(parser)
+	elif parent.get_type() == ChunkType.Clump:
+		chunk.struct = ClumpStruct(parser)
+	elif parent.get_type() == ChunkType.FrameList:
+		chunk.struct = FrameListStruct(parser)
 	elif parent.get_type() == ChunkType.PlaneSection:
 		# ehh, we just discard this later anyways...
 		# as we're only interested in the atomic sections 
@@ -226,10 +244,10 @@ class AtomicSectionExtensionData(Struct):
 		assert parent.get_type() == ChunkType.Extension
 		assert parent.get_parent().get_type() == ChunkType.AtomicSection
 		assert parent.get_parent().get_child_struct() is not None
-		num_faces = parent.get_parent().get_child_struct().num_faces
+		num_triangles = parent.get_parent().get_child_struct().num_triangles
 		self.padding = br.read_uint32() # @todo: idk always 6??
 		assert self.padding == 6
-		self.flags = [br.read_uint16() for _ in range(num_faces)]
+		self.flags = [br.read_uint16() for _ in range(num_triangles)]
 		self.unkXX = br.read_uint32() # @todo
 		#assert self.unkXX == 0
 		self.name = br.read_uint32() # sector checksum name
@@ -246,7 +264,7 @@ class MaterialExtensionData(Struct):
 		assert parent.get_type() == ChunkType.Extension
 		assert parent.get_parent().get_type() == ChunkType.Material
 		assert parent.get_parent().get_child_struct() is not None
-		pass
+		pass # @todo
 
 
 # -------------------------------------------------------------------------------------------------
@@ -258,26 +276,51 @@ class TextureExtensionData(Struct):
 		assert parent.get_type() == ChunkType.Extension
 		assert parent.get_parent().get_type() == ChunkType.Texture
 		assert parent.get_parent().get_child_struct() is not None
-		pass
+		pass # @todo
+
+
+# -------------------------------------------------------------------------------------------------
+class FrameListStruct(Struct):
+	def __init__(self, br):
+		super().__init__()
+		self.num_frames = br.read_uint32()
+		self.frames = []
+		for _ in range(self.num_frames):
+			frame = {}
+			frame['right'] = br.read_vec3()
+			frame['up'] = br.read_vec3()
+			frame['forward'] = br.read_vec3()
+			frame['position'] = br.read_vec3()
+			frame['parent_frame'] = br.read_int32()
+			frame['unknown'] = br.read_uint32()
+			self.frames.append(frame)
+
+
+# -------------------------------------------------------------------------------------------------
+class ClumpStruct(Struct):
+	def __init__(self, br):
+		super().__init__()
+		self.num_atomics = br.read_uint32()
+	#	self.num_lights = br.read_uint32()
+	#	self.num_cameras = br.read_uint32()
 
 
 # -------------------------------------------------------------------------------------------------
 class WorldStruct(Struct):
 	def __init__(self, br):
 		super().__init__()
-		self.unk00 = br.read_uint32()
-		self.unk04 = br.read_float()
-		self.unk08 = br.read_float()
-		self.unk12 = br.read_float()
-		self.unk16 = br.read_float()
-		self.unk20 = br.read_uint32()
+		self.root_is_world_sector = br.read_int32()
+		self.inverse_origin = br.read_vec3()
+		self.ambient = br.read_float()
+		self.specular = br.read_float()
+		self.diffuse = br.read_float()
 		self.num_triangles = br.read_uint32()
 		self.num_vertices = br.read_uint32()
 		self.num_planes = br.read_uint32()
 		self.num_atomics = br.read_uint32()
-		self.unk44 = br.read_uint32()
-		self.world_flags = br.read_uint32()
-		TMP['world_flags'] = self.world_flags # @tmp hack
+		self.collision_sector_size = br.read_uint32()
+		self.flags = br.read_uint32()
+		WORLD_GLOBAL['flags'] = self.flags # @tmp hack
 
 
 # -------------------------------------------------------------------------------------------------
@@ -294,7 +337,66 @@ class MaterialListStruct(Struct):
 class MaterialStruct(Struct):
 	def __init__(self, br):
 		super().__init__()
-		pass # @todo
+		self.flags = br.read_uint32()
+		self.color = br.read_uint32()
+		self.unk08 = br.read_uint32()
+		self.has_texture = br.read_uint32()
+		self.ambient = br.read_float()
+		self.specular = br.read_float()
+		self.diffuse = br.read_float()
+
+
+# -------------------------------------------------------------------------------------------------
+class GeometryListStruct(Struct):
+	def __init__(self, br):
+		super().__init__()
+		self.num_geom = br.read_uint32()
+
+
+# -------------------------------------------------------------------------------------------------
+class GeometryStruct(Struct):
+	def __init__(self, br):
+		super().__init__()
+		self.flags = br.read_uint16()
+		br.seek(2, os.SEEK_CUR) # hmm
+		self.num_triangles = br.read_uint32()
+		self.num_vertices = br.read_uint32()
+		self.num_frames = br.read_uint32()
+		br.seek(12, os.SEEK_CUR) # @todo light stuff?
+
+		if (self.flags & WorldFlags.NATIVE):
+			raise NotImplementedError('NATIVE GEOMETRY STUFF!!!')
+		if (self.flags & WorldFlags.PRELIT):
+			self.colors = [br.read_uint32() for _ in range(self.num_vertices)]
+		if (self.flags & WorldFlags.TEXTURED):
+			self.uvs = [br.read_vec2() for _ in range(self.num_vertices)]
+		if (self.flags & WorldFlags.TEXTURED2):
+			self.uvs2 = [br.read_vec2() for _ in range(self.num_vertices)]
+
+		def read_triangles(br, count):
+			triangles = []
+			for _ in range(count):
+				triangles.append(br.read_uint16())
+				triangles.append(br.read_uint16())
+				br.seek(2, os.SEEK_CUR) # hmm
+				triangles.append(br.read_uint16())
+			return triangles
+
+		self.triangles = read_triangles(br, self.num_triangles)
+		self.vertices = [br.read_vec3() for _ in range(self.num_vertices)]
+	
+		if (self.flags & WorldFlags.NORMALS):
+			self.normals = [br.read_vec3() for _ in range(self.num_vertices)]
+
+
+# -------------------------------------------------------------------------------------------------
+class AtomicStruct(Struct):
+	def __init__(self, br):
+		super().__init__()
+		self.frame_index = br.read_uint32()
+		self.geometry_index = br.read_uint32()
+		self.flags = br.read_uint32()
+		br.seek(4, os.SEEK_CUR) # padding?
 
 
 # -------------------------------------------------------------------------------------------------
@@ -309,24 +411,24 @@ class TextureStruct(Struct):
 class AtomicSectionStruct(Struct):
 	def __init__(self, br):
 		super().__init__()
-		self.unk00 = br.read_uint32() # @todo, always null?
-		self.num_faces = br.read_uint32()
-		self.num_verts = br.read_uint32()
+		self.unk00 = br.read_uint32() # @todo, material list window base?
+		self.num_triangles = br.read_uint32()
+		self.num_vertices = br.read_uint32()
 		self.bbox = [br.read_float() for _ in range(6)]
-		self.unk32 = br.read_uint32() # @todo
-		self.unk36 = br.read_uint32() # @todo
-		self.vertices = [br.read_vec3() for _ in range(self.num_verts)]
-		if (TMP['world_flags'] & WorldFlags.NORMALS):
-			br.seek(self.num_verts * 4, os.SEEK_CUR)
-		self.colors = [br.read_uint32() for _ in range(self.num_verts)]
-		self.uvs = [br.read_vec2() for _ in range(self.num_verts)]
+		br.seek(4, os.SEEK_CUR) # possibly collision sector flag?
+		br.seek(4, os.SEEK_CUR) # unused?
+		self.vertices = [br.read_vec3() for _ in range(self.num_vertices)]
+		if (WORLD_GLOBAL['flags'] & WorldFlags.NORMALS):
+			br.seek(self.num_vertices * 4, os.SEEK_CUR)
+		self.colors = [br.read_uint32() for _ in range(self.num_vertices)]
+		self.uvs = [br.read_vec2() for _ in range(self.num_vertices)]
 		if any([
-			(TMP['world_flags'] & WorldFlags.MODULATE_MATERIAL_COLOR),
-			(TMP['world_flags'] & WorldFlags.TEXTURED2)
+			(WORLD_GLOBAL['flags'] & WorldFlags.MODULATE_MATERIAL_COLOR),
+			(WORLD_GLOBAL['flags'] & WorldFlags.TEXTURED2)
 		]):
-			br.seek(self.num_verts * 8, os.SEEK_CUR)
+			br.seek(self.num_vertices * 8, os.SEEK_CUR)
 		# @todo
-		# self.collision = [[br.read_uint16() for _ in range(4)] for _ in range(self.num_faces)]
+		# self.collision = [[br.read_uint16() for _ in range(4)] for _ in range(self.num_triangles)]
 
 
 # -------------------------------------------------------------------------------------------------
