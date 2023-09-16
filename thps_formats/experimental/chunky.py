@@ -7,6 +7,21 @@ from thps_formats.utils.reader import BinaryReader
 
 
 # -------------------------------------------------------------------------------------------------
+# steps:
+# - recursively read chunks
+# 	- de-serialize structs
+# 	- de-serialize structs
+# 	- de-serialize other chunks
+# - flatten plane section 
+# - convert to shared scene structure
+
+# todo:
+# - material extensions
+# - texture extensions
+# - triangles??
+# - collision and bsp stuff – for completeness 
+
+# -------------------------------------------------------------------------------------------------
 WORLD_GLOBAL = {'flags': 0} # @tmp hack
 
 
@@ -109,7 +124,7 @@ def process_chunk(br, parent=None):
 	# handle struct chunks and de-serialize them
 	if chunk.get_type() == ChunkType.Struct:
 		chunk.raw = br.read_bytes(chunk.get_size())
-		deserialize_chunk_struct(chunk, parent)
+		deserialize_chunk_struct(chunk)
 
 	# handle strings separately... @todo: unicode strings
 	elif chunk.get_type() == ChunkType.String:
@@ -133,13 +148,13 @@ def process_chunk(br, parent=None):
 			br.seek(-12, os.SEEK_CUR)
 		# ----------------------------------------
 		chunk.raw = br.read_bytes(chunk.get_size())
-		deserialize_chunk_data(chunk, parent)
+		deserialize_chunk_data(chunk)
 
 	return chunk
 
 
 # -------------------------------------------------------------------------------------------------
-def deserialize_chunk_data(chunk, parent):
+def deserialize_chunk_data(chunk):
 	parser = BinaryReader(chunk.raw)
 	if chunk.get_type() == ChunkType.BinMesh:
 		chunk.data = BinMeshData(parser)
@@ -148,6 +163,7 @@ def deserialize_chunk_data(chunk, parent):
 	elif chunk.get_type() == ChunkType.MaterialEffects:
 		chunk.data = MaterialEffectsData(parser)
 	elif chunk.get_type() == ChunkType.ExtensionTHPS:
+		parent = chunk.get_parent()
 		if parent.get_parent().get_type() == ChunkType.AtomicSection:
 			chunk.data = AtomicSectionExtensionData(parser, parent)
 		elif parent.get_parent().get_type() == ChunkType.Material:
@@ -163,35 +179,35 @@ def deserialize_chunk_data(chunk, parent):
 
 
 # -------------------------------------------------------------------------------------------------
-def deserialize_chunk_struct(chunk, parent):
+def deserialize_chunk_struct(chunk):
 	parser = BinaryReader(chunk.raw)
-	if parent.get_type() == ChunkType.World:
+	if chunk.get_parent().get_type() == ChunkType.World:
 		chunk.struct = WorldStruct(parser)
-	elif parent.get_type() == ChunkType.MaterialList:
+	elif chunk.get_parent().get_type() == ChunkType.MaterialList:
 		chunk.struct = MaterialListStruct(parser)
-	elif parent.get_type() == ChunkType.Material:
+	elif chunk.get_parent().get_type() == ChunkType.Material:
 		chunk.struct = MaterialStruct(parser)
-	elif parent.get_type() == ChunkType.Atomic:
+	elif chunk.get_parent().get_type() == ChunkType.Atomic:
 		chunk.struct = AtomicStruct(parser)
-	elif parent.get_type() == ChunkType.GeometryList:
+	elif chunk.get_parent().get_type() == ChunkType.GeometryList:
 		chunk.struct = GeometryListStruct(parser)
-	elif parent.get_type() == ChunkType.Geometry:
+	elif chunk.get_parent().get_type() == ChunkType.Geometry:
 		chunk.struct = GeometryStruct(parser)
-	elif parent.get_type() == ChunkType.Texture:
+	elif chunk.get_parent().get_type() == ChunkType.Texture:
 		chunk.struct = TextureStruct(parser)
-	elif parent.get_type() == ChunkType.AtomicSection:
+	elif chunk.get_parent().get_type() == ChunkType.AtomicSection:
 		chunk.struct = AtomicSectionStruct(parser)
-	elif parent.get_type() == ChunkType.Clump:
+	elif chunk.get_parent().get_type() == ChunkType.Clump:
 		chunk.struct = ClumpStruct(parser)
-	elif parent.get_type() == ChunkType.FrameList:
+	elif chunk.get_parent().get_type() == ChunkType.FrameList:
 		chunk.struct = FrameListStruct(parser)
-	elif parent.get_type() == ChunkType.PlaneSection:
+	elif chunk.get_parent().get_type() == ChunkType.PlaneSection:
 		# ehh, we just discard this later anyways...
 		# as we're only interested in the atomic sections 
 		pass
 	else:
 		#raise NotImplementedError(f'Unhandled Struct for {parent.get_type()}')
-		print(f'Skip parsing struct for {parent.get_type()} with size {chunk.get_size()} at {chunk.get_start()}...')
+		print(f'Skip parsing struct for {chunk.get_parent().get_type()} with size {chunk.get_size()} at {chunk.get_start()}...')
 
 
 # -------------------------------------------------------------------------------------------------
@@ -388,6 +404,8 @@ class GeometryStruct(Struct):
 		if (self.flags & WorldFlags.NORMALS):
 			self.normals = [br.read_vec3() for _ in range(self.num_vertices)]
 
+		# @todo??
+
 
 # -------------------------------------------------------------------------------------------------
 class AtomicStruct(Struct):
@@ -441,6 +459,8 @@ class Chunk(object):
 	struct = None
 	string = None
 
+	# @todo, generalize data and struct... move string to String chunk?
+
 	def __init__(self):
 		pass
 
@@ -467,13 +487,11 @@ class Chunk(object):
 		elif self.type == ChunkType.Struct:
 			if self.struct is not None:
 				result['struct'] = self.struct.toJSON()
-			result['raw'] = self.raw.hex()
 		elif self.type == ChunkType.String:
 			result['string'] = str(self.string)
 		elif self.data is not None:
 			result['data'] = self.data.toJSON()
-			result['raw'] = self.raw.hex()
-		elif self.raw is not None:
+		if self.raw is not None:
 			result['raw'] = self.raw.hex()
 
 		return result
@@ -569,13 +587,6 @@ def to_scene(root, filename):
 
 # -------------------------------------------------------------------------------------------------
 sys.setrecursionlimit(2048 * 2)
-
-# steps/todo:
-# - recursively read chunks
-# 	- de-serialize structs
-# 	- de-serialize other chunks
-# - flatten plane section 
-# - convert to shared scene structure
 
 
 # -------------------------------------------------------------------------------------------------
