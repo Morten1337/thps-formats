@@ -4,6 +4,7 @@ import json
 from enum import Enum, IntEnum
 from pathlib import Path as Path
 from thps_formats.utils.reader import BinaryReader
+from . enums import ChunkType
 
 
 # -------------------------------------------------------------------------------------------------
@@ -46,72 +47,49 @@ def find_first_chunk_of_type(chunks, chunk_type):
 
 
 # -------------------------------------------------------------------------------------------------
-class WorldFlags(IntEnum):
-	TRISTRIP = 0x00000001 # This world's meshes can be rendered as tri strips
-	POSITIONS = 0x00000002 # This world has positions
-	TEXTURED = 0x00000004 # This world has only one set of texture coordinates
-	PRELIT = 0x00000008 # This world has luminance values
-	NORMALS = 0x00000010 # This world has normals
-	LIGHT = 0x00000020 # This world will be lit 🔥
-	MODULATE_MATERIAL_COLOR = 0x00000040 # Modulate material color with vertex colors (pre-lit + lit)
-	TEXTURED2 = 0x00000080 # This world has 2 or more sets of texture coordinates
-
+class GeometryFlags(IntEnum):
+	TRISTRIP = 0x00000001 # This geometry's meshes can be rendered as tri strips
+	POSITIONS = 0x00000002 # This geometry has positions  
+	TEXTURED = 0x00000004 # This geometry has only one set of texture coordinates
+	PRELIT = 0x00000008 # This geometry has pre-light colors
+	NORMALS = 0x00000010 # This geometry has vertex normals
+	LIGHT = 0x00000020 # This geometry will be lit
+	MODULATEMATERIALCOLOR = 0x00000040 # Modulate material color  with vertex colors (pre-lit + lit)
+	TEXTURED2 = 0x00000080 # This geometry has at least 2 sets of texture coordinates
 	NATIVE = 0x01000000
-	NATIVE_INSTANCE = 0x02000000
-	FLAGS_MASK = 0x000000FF
-	NATIVE_FLAGS_MASK = 0x0F000000
-	SECTORS_OVERLAP = 0x40000000
+	NATIVEINSTANCE = 0x02000000
+	FLAGSMASK = 0x000000FF
+	NATIVEFLAGSMASK = 0x0F000000
+	SECTORSOVERLAP = 0x40000000 # World Flag
 
 
 # -------------------------------------------------------------------------------------------------
 class AtomicFlags(IntEnum):
-	NONE = 0x00000000
-	COLLISION = 0x00000001
-	RENDER = 0x00000004
-	COLLISION_AND_RENDER = 0x00000004
+	NONE = 0x00
+	COLLISION = 0x01
+	RENDER = 0x04
 
 
 # -------------------------------------------------------------------------------------------------
-# https://gtamods.com/wiki/List_of_RW_section_IDs
-class ChunkType(Enum):
+class MeshHeaderFlags(IntEnum):
+	TRILIST = 0x0000
+	TRISTRIP = 0x0001
+	TRIFAN = 0x0002
+	LINELIST = 0x0004
+	POLYLINE = 0x0008
+	POINTLIST = 0x0010
+	UNINDEXED = 0x0100
 
-	Struct				= 0x00000001 # A generic section that stores data for its parent.
-	String				= 0x00000002 # Stores a 4-byte aligned ASCII string.
-	Extension			= 0x00000003 # A container for non-standard extensions of its parent section.
 
-	Camera				= 0x00000005 # Contains a camera (possibly unused).
-	Texture				= 0x00000006 # Stores the sampler state of a texture.
-	Material			= 0x00000007 # Defines a material to be used on a geometry.
-	MaterialList		= 0x00000008 # Container for a list of materials.
-	AtomicSection		= 0x00000009
-	PlaneSection		= 0x0000000A
-	World				= 0x0000000B # The root section of the level geometry.
-	Spline				= 0x0000000C
-	Matrix				= 0x0000000D
-	FrameList			= 0x0000000E # Container for a list of frames. A frame holds the transformation that is applied to an Atomic.
-	Geometry			= 0x0000000F # A platform-independent container for meshes.
-	Clump				= 0x00000010 # The root section for a 3D model.
-	Light				= 0x00000012 # Stores different dynamic lights.
-	UnicodeString		= 0x00000013
-	Atomic				= 0x00000014 # Defines the basic unit for the RenderWare graphics pipeline. Generally speaking, an Atomic can be directly converted to a single draw call.
-	Raster				= 0x00000015 # Stores a platform-dependent (i.e. native) texture image.
-	TextureDictionary	= 0x00000016 # A container for texture images (also called raster).
-	AnimationDatabase	= 0x00000017
-	Image				= 0x00000018
-	SkinAnimation		= 0x00000019
-	GeometryList		= 0x0000001A # A container for a list of geometries.
-
-	# @todo ...
-	MorphPLG			= 0x00000105 # The Morph plugin is a extension of the Geometry section and is rarely used...
-
-	MaterialEffects		= 0x00000120
-	Collision			= 0x0000011D
-	CollisionTHPS		= 0x000001AF # thps3 PLG
-	BinMesh				= 0x0000050E # faceset/mesh/matsplit
-
-	ExtensionTHPS		= 0x0294AF01 # thps3 extension
-	ExtensionUnk02		= 0x0294AF02 # thps3 extension
-	ExtensionUnk04		= 0x0294AF04 # thps3 extension (dff)
+# -------------------------------------------------------------------------------------------------
+class MatFXMaterialFlags(Enum):
+	NULL = 0 # No material effect
+	BUMPMAP = 1 # Bump mapping 
+	ENVMAP = 2 # Environment mapping 
+	BUMPENVMAP = 3 # Bump and environment mapping 
+	DUAL = 4 # Dual pass 
+	UVTRANSFORM = 5 # Base UV transform 
+	DUALUVTRANSFORM = 6 # Dual UV transform (2 pass)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -122,16 +100,19 @@ def process_chunk(br, parent=None):
 	#print('reading chunk', chunk.get_type())
 
 	# handle struct chunks and de-serialize them
-	if chunk.get_type() == ChunkType.Struct:
+	if chunk.get_type() == ChunkType.STRUCT:
 		chunk.raw = br.read_bytes(chunk.get_size())
 		deserialize_chunk_struct(chunk)
 
 	# handle strings separately... @todo: unicode strings
-	elif chunk.get_type() == ChunkType.String:
+	elif chunk.get_type() == ChunkType.STRING:
 		chunk.string = br.read_bytes(chunk.get_size())
 
 	# handle nested chunks
 	elif chunk.is_container():
+		if chunk.get_size() == 0:
+			print(f'Skipping empty chunk {chunk.get_type()}')
+			return chunk
 		while (br.stream.tell() < chunk.get_start() + chunk.get_size()):
 			tmp = process_chunk(br, parent=chunk)
 			chunk.chunks.append(tmp)
@@ -156,22 +137,29 @@ def process_chunk(br, parent=None):
 # -------------------------------------------------------------------------------------------------
 def deserialize_chunk_data(chunk):
 	parser = BinaryReader(chunk.raw)
-	if chunk.get_type() == ChunkType.BinMesh:
+	if chunk.get_type() == ChunkType.BINMESHPLUGIN:
 		chunk.data = BinMeshData(parser)
-	elif chunk.get_type() == ChunkType.Collision:
+	elif chunk.get_type() == ChunkType.COLLISPLUGIN:
 		chunk.data = CollisionData(parser)
-	elif chunk.get_type() == ChunkType.MaterialEffects:
+	elif chunk.get_type() == ChunkType.MATERIALEFFECTSPLUGIN:
 		chunk.data = MaterialEffectsData(parser)
-	elif chunk.get_type() == ChunkType.ExtensionTHPS:
+	elif chunk.get_type() == ChunkType.EXTENSIONTHPS:
 		parent = chunk.get_parent()
-		if parent.get_parent().get_type() == ChunkType.AtomicSection:
-			chunk.data = AtomicSectionExtensionData(parser, parent)
-		elif parent.get_parent().get_type() == ChunkType.Material:
-			chunk.data = MaterialExtensionData(parser, parent)
-		elif parent.get_parent().get_type() == ChunkType.Texture:
-			chunk.data = TextureExtensionData(parser, parent)
+		if parent.get_parent() is not None:
+			if parent.get_parent().get_type() == ChunkType.ATOMICSECT:
+				chunk.data = AtomicSectionExtensionData(parser, parent)
+			elif parent.get_parent().get_type() == ChunkType.MATERIAL:
+				chunk.data = MaterialExtensionData(parser, parent)
+			elif parent.get_parent().get_type() == ChunkType.TEXTURE:
+				chunk.data = TextureExtensionData(parser, parent)
+			elif parent.get_parent().get_type() == ChunkType.ATOMIC:
+				chunk.data = AtomicExtensionData(parser, parent)
+			else:
+				print(f'Got THPS3 Extension but parent type is {parent.get_parent().get_type()}...')
+				pass
 		else:
-			print(f'Got THPS3 Extension but parent type is {parent.get_parent().get_type()}...')
+			# root extension probably
+			print(f'Got THPS3 Extension but parent is an orphan {parent.get_type()}...?')
 			pass
 	else:
 		#raise NotImplementedError(f'Unhandled Data for {chunk.get_type()}')
@@ -181,27 +169,27 @@ def deserialize_chunk_data(chunk):
 # -------------------------------------------------------------------------------------------------
 def deserialize_chunk_struct(chunk):
 	parser = BinaryReader(chunk.raw)
-	if chunk.get_parent().get_type() == ChunkType.World:
+	if chunk.get_parent().get_type() == ChunkType.WORLD:
 		chunk.struct = WorldStruct(parser)
-	elif chunk.get_parent().get_type() == ChunkType.MaterialList:
+	elif chunk.get_parent().get_type() == ChunkType.MATLIST:
 		chunk.struct = MaterialListStruct(parser)
-	elif chunk.get_parent().get_type() == ChunkType.Material:
+	elif chunk.get_parent().get_type() == ChunkType.MATERIAL:
 		chunk.struct = MaterialStruct(parser)
-	elif chunk.get_parent().get_type() == ChunkType.Atomic:
+	elif chunk.get_parent().get_type() == ChunkType.ATOMIC:
 		chunk.struct = AtomicStruct(parser)
-	elif chunk.get_parent().get_type() == ChunkType.GeometryList:
+	elif chunk.get_parent().get_type() == ChunkType.GEOMETRYLIST:
 		chunk.struct = GeometryListStruct(parser)
-	elif chunk.get_parent().get_type() == ChunkType.Geometry:
+	elif chunk.get_parent().get_type() == ChunkType.GEOMETRY:
 		chunk.struct = GeometryStruct(parser)
-	elif chunk.get_parent().get_type() == ChunkType.Texture:
+	elif chunk.get_parent().get_type() == ChunkType.TEXTURE:
 		chunk.struct = TextureStruct(parser)
-	elif chunk.get_parent().get_type() == ChunkType.AtomicSection:
+	elif chunk.get_parent().get_type() == ChunkType.ATOMICSECT:
 		chunk.struct = AtomicSectionStruct(parser)
-	elif chunk.get_parent().get_type() == ChunkType.Clump:
+	elif chunk.get_parent().get_type() == ChunkType.CLUMP:
 		chunk.struct = ClumpStruct(parser)
-	elif chunk.get_parent().get_type() == ChunkType.FrameList:
+	elif chunk.get_parent().get_type() == ChunkType.FRAMELIST:
 		chunk.struct = FrameListStruct(parser)
-	elif chunk.get_parent().get_type() == ChunkType.PlaneSection:
+	elif chunk.get_parent().get_type() == ChunkType.PLANESECT:
 		# ehh, we just discard this later anyways...
 		# as we're only interested in the atomic sections 
 		pass
@@ -257,8 +245,8 @@ class AtomicSectionExtensionData(Struct):
 	# @note: maybe pass the chunk instead, and get the parent from that?
 	def __init__(self, br, parent):
 		super().__init__()
-		assert parent.get_type() == ChunkType.Extension
-		assert parent.get_parent().get_type() == ChunkType.AtomicSection
+		assert parent.get_type() == ChunkType.EXTENSION
+		assert parent.get_parent().get_type() == ChunkType.ATOMICSECT
 		assert parent.get_parent().get_child_struct() is not None
 		num_triangles = parent.get_parent().get_child_struct().num_triangles
 		self.padding = br.read_uint32() # @todo: idk always 6??
@@ -272,13 +260,22 @@ class AtomicSectionExtensionData(Struct):
 
 
 # -------------------------------------------------------------------------------------------------
+class AtomicExtensionData(Struct):
+
+	# @note: maybe pass the chunk instead, and get the parent from that?
+	def __init__(self, br, parent):
+		super().__init__()
+		pass # @todo
+
+
+# -------------------------------------------------------------------------------------------------
 class MaterialExtensionData(Struct):
 
 	# @note: maybe pass the chunk instead, and get the parent from that?
 	def __init__(self, br, parent):
 		super().__init__()
-		assert parent.get_type() == ChunkType.Extension
-		assert parent.get_parent().get_type() == ChunkType.Material
+		assert parent.get_type() == ChunkType.EXTENSION
+		assert parent.get_parent().get_type() == ChunkType.MATERIAL
 		assert parent.get_parent().get_child_struct() is not None
 		pass # @todo
 
@@ -289,8 +286,8 @@ class TextureExtensionData(Struct):
 	# @note: maybe pass the chunk instead, and get the parent from that?
 	def __init__(self, br, parent):
 		super().__init__()
-		assert parent.get_type() == ChunkType.Extension
-		assert parent.get_parent().get_type() == ChunkType.Texture
+		assert parent.get_type() == ChunkType.EXTENSION
+		assert parent.get_parent().get_type() == ChunkType.TEXTURE
 		assert parent.get_parent().get_child_struct() is not None
 		pass # @todo
 
@@ -380,13 +377,13 @@ class GeometryStruct(Struct):
 		self.num_frames = br.read_uint32()
 		br.seek(12, os.SEEK_CUR) # @todo light stuff?
 
-		if (self.flags & WorldFlags.NATIVE):
+		if (self.flags & GeometryFlags.NATIVE):
 			raise NotImplementedError('NATIVE GEOMETRY STUFF!!!')
-		if (self.flags & WorldFlags.PRELIT):
+		if (self.flags & GeometryFlags.PRELIT):
 			self.colors = [br.read_uint32() for _ in range(self.num_vertices)]
-		if (self.flags & WorldFlags.TEXTURED):
+		if (self.flags & GeometryFlags.TEXTURED):
 			self.uvs = [br.read_vec2() for _ in range(self.num_vertices)]
-		if (self.flags & WorldFlags.TEXTURED2):
+		if (self.flags & GeometryFlags.TEXTURED2):
 			self.uvs2 = [br.read_vec2() for _ in range(self.num_vertices)]
 
 		def read_triangles(br, count):
@@ -401,7 +398,7 @@ class GeometryStruct(Struct):
 		self.triangles = read_triangles(br, self.num_triangles)
 		self.vertices = [br.read_vec3() for _ in range(self.num_vertices)]
 	
-		if (self.flags & WorldFlags.NORMALS):
+		if (self.flags & GeometryFlags.NORMALS):
 			self.normals = [br.read_vec3() for _ in range(self.num_vertices)]
 
 		# @todo??
@@ -436,13 +433,13 @@ class AtomicSectionStruct(Struct):
 		br.seek(4, os.SEEK_CUR) # possibly collision sector flag?
 		br.seek(4, os.SEEK_CUR) # unused?
 		self.vertices = [br.read_vec3() for _ in range(self.num_vertices)]
-		if (WORLD_GLOBAL['flags'] & WorldFlags.NORMALS):
+		if (WORLD_GLOBAL['flags'] & GeometryFlags.NORMALS):
 			br.seek(self.num_vertices * 4, os.SEEK_CUR)
 		self.colors = [br.read_uint32() for _ in range(self.num_vertices)]
 		self.uvs = [br.read_vec2() for _ in range(self.num_vertices)]
 		if any([
-			(WORLD_GLOBAL['flags'] & WorldFlags.MODULATE_MATERIAL_COLOR),
-			(WORLD_GLOBAL['flags'] & WorldFlags.TEXTURED2)
+			(WORLD_GLOBAL['flags'] & GeometryFlags.MODULATEMATERIALCOLOR),
+			(WORLD_GLOBAL['flags'] & GeometryFlags.TEXTURED2)
 		]):
 			br.seek(self.num_vertices * 8, os.SEEK_CUR)
 		# @todo
@@ -484,15 +481,16 @@ class Chunk(object):
 		result = {'type': str(self.type), 'size': self.size}
 		if len(self.chunks) > 0:
 			result['chunks'] = [chunk.toJSON() for chunk in self.chunks]
-		elif self.type == ChunkType.Struct:
+		elif self.type == ChunkType.STRUCT:
 			if self.struct is not None:
 				result['struct'] = self.struct.toJSON()
-		elif self.type == ChunkType.String:
+		elif self.type == ChunkType.STRING:
 			result['string'] = str(self.string)
 		elif self.data is not None:
 			result['data'] = self.data.toJSON()
 		if self.raw is not None:
 			result['raw'] = self.raw.hex()
+		result['offset'] = str(tohex(self.get_start(), 32))
 
 		return result
 
@@ -500,26 +498,29 @@ class Chunk(object):
 	def is_container(self):
 		return (self.type in [
 			# ----- common -----
-			ChunkType.Extension,
-			ChunkType.MaterialList,
-			ChunkType.Material,
-			ChunkType.Texture,
+			ChunkType.EXTENSION,
+			ChunkType.MATLIST,
+			ChunkType.MATERIAL,
+			ChunkType.TEXTURE,
+			# ----- tdx -----
+			ChunkType.TEXDICTIONARY, 
+			ChunkType.TEXTURENATIVE, 
 			# ----- bsp ----- 
-			ChunkType.World,
-			ChunkType.PlaneSection,
-			ChunkType.AtomicSection,
+			ChunkType.WORLD,
+			ChunkType.PLANESECT,
+			ChunkType.ATOMICSECT,
 			# ----- dff -----
-			ChunkType.Clump,
-			ChunkType.FrameList,
-			ChunkType.GeometryList,
-			ChunkType.Geometry,
-			ChunkType.Atomic,
+			ChunkType.CLUMP,
+			ChunkType.FRAMELIST,
+			ChunkType.GEOMETRYLIST,
+			ChunkType.GEOMETRY,
+			ChunkType.ATOMIC,
 		])
 
 	# 
 	def get_child_struct(self):
 		if len(self.chunks) > 0:
-			return find_first_chunk_of_type(self.chunks, ChunkType.Struct).struct
+			return find_first_chunk_of_type(self.chunks, ChunkType.STRUCT).struct
 		return None
 
 	# 
@@ -548,7 +549,7 @@ def to_scene(root, filename):
 
 	def flatten_binary_tree(root):
 
-		if root.get_type() == ChunkType.AtomicSection:
+		if root.get_type() == ChunkType.ATOMICSECT:
 			return [root]
 
 		result = []
@@ -558,8 +559,8 @@ def to_scene(root, filename):
 		return result
 
 	# -- flatten plane sections
-	plane = find_first_chunk_of_type(root.chunks, ChunkType.PlaneSection)
-	assert plane.get_type() == ChunkType.PlaneSection
+	plane = find_first_chunk_of_type(root.chunks, ChunkType.PLANESECT)
+	assert plane.get_type() == ChunkType.PLANESECT
 	atomics = flatten_binary_tree(plane)
 	root.chunks.remove(plane)
 	root.chunks.extend(atomics)
@@ -573,8 +574,8 @@ def to_scene(root, filename):
 	#	json.dump([chunk.toJSON() for chunk in atomics], out, indent=4)
 
 	def handle_materials(root):
-		container = find_first_chunk_of_type(root.chunks, ChunkType.MaterialList)
-		materials = find_chunks_by_type(container.chunks, ChunkType.Material)
+		container = find_first_chunk_of_type(root.chunks, ChunkType.MATLIST)
+		materials = find_chunks_by_type(container.chunks, ChunkType.MATERIAL)
 	#	print(container)
 	#	print(materials)
 
@@ -610,21 +611,34 @@ def Chunky(filename):
 		# separate tests for bsp files
 		if extension == 'bsp':
 			root = process_chunk(br, None)
-			assert root.get_type() == ChunkType.World
+			assert root.get_type() == ChunkType.WORLD
 			to_scene(root, 'ap.scn.xbx')
 			return root
 
 		# separate tests for dff files
 		elif extension == 'dff':
-
 			chunks = []
 			while (br.stream.tell() < filesize):
 				chunks.append(process_chunk(br, None))
-			assert chunks[0].get_type() == ChunkType.Clump
+			assert chunks[0].get_type() == ChunkType.CLUMP
 
 			# -- debug
 			with open(f'./tests/data/{scenename}-dff.json', 'w') as out:
 				json.dump([chunk.toJSON() for chunk in chunks], out, indent=4)
 			return chunks
+
+		# separate tests for skn files
+		elif extension == 'skn':
+			root = process_chunk(br, None)
+			with open(f'./tests/data/{scenename}-skn.json', 'w') as out:
+				json.dump(root.toJSON(), out, indent=4)
+			return root
+
+		# separate tests for tdx files
+		elif extension == 'tdx':
+			root = process_chunk(br, None)
+			with open(f'./tests/data/{scenename}-tdx.json', 'w') as out:
+				json.dump(root.toJSON(), out, indent=4)
+			return root
 
 		return None
