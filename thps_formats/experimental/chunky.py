@@ -5,7 +5,17 @@ from enum import Enum, IntEnum
 from pathlib import Path as Path
 from thps_formats.utils.reader import BinaryReader
 from . enums import ChunkType
+from . utils import (
+	find_chunks_by_type,
+	find_first_chunk_of_type
+)
 
+
+# -------------------------------------------------------------------------------------------------
+# https://github.com/Venomalia/RenderWareNET/tree/main/src/RenderWareNET/Plugins
+# https://github.com/Struggleton/Amicitia/tree/master/AtlusLibSharp/Graphics/RenderWare
+# https://github.com/NanoBob/renderwareio/tree/main/RenderWareIo/Structs
+# https://gtamods.com/wiki/List_of_RW_section_IDs
 
 # -------------------------------------------------------------------------------------------------
 # steps:
@@ -29,21 +39,6 @@ WORLD_GLOBAL = {'flags': 0} # @tmp hack
 # -------------------------------------------------------------------------------------------------
 def tohex(val, nbits):
 	return hex((val + (1 << nbits)) % (1 << nbits))
-
-
-# -------------------------------------------------------------------------------------------------
-def count_chunks_of_type(chunks, chunk_type):
-	return sum(1 for chunk in chunks if chunk.get_type() == chunk_type)
-
-
-# -------------------------------------------------------------------------------------------------
-def find_chunks_by_type(chunks, chunk_type):
-	return [chunk for chunk in chunks if chunk.get_type() == chunk_type]
-
-
-# -------------------------------------------------------------------------------------------------
-def find_first_chunk_of_type(chunks, chunk_type):
-	return next((chunk for chunk in chunks if chunk.get_type() == chunk_type), None)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -90,6 +85,37 @@ class MatFXMaterialFlags(Enum):
 	DUAL = 4 # Dual pass 
 	UVTRANSFORM = 5 # Base UV transform 
 	DUALUVTRANSFORM = 6 # Dual UV transform (2 pass)
+
+
+# -------------------------------------------------------------------------------------------------
+class TextureAttrbutes(IntEnum):
+	LUM8A8 = 0
+	NATIVE = 4 # Use for most GC
+	C1555 = 0x0100
+	C565 = 0x0200
+	C4444 = 0x0300
+	LUM8 = 0x0400
+	C8888 = 0x0500
+	C888 = 0x0600
+	D16 = 0x0700 # A 16-bit texture format used for depth buffer purposes.
+	D24 = 0x0800 # A 24-bit texture format used for depth buffer purposes.
+	D32 = 0x0900 # A 32-bit texture format used for depth buffer purposes.
+	C555 = 0x0A00
+	AUTOMIPMAPS = 0x1000 # A flag indicating that the texture uses automatic mipmap generation.
+	PAL8 = 0x2000 # A palette texture format with 256 colors.
+	PAL4 = 0x4000 # A palette texture format with 16 colors.
+	MIPMAPS = 0x8000 # A flag indicating that the texture uses mipmapping.
+	UNK = 0x20000
+
+
+# -------------------------------------------------------------------------------------------------
+class TexturePlatform(Enum):
+	XBOX = 5
+	D3D8 = 8
+	D3D9 = 9
+	GC = 0x6000000 # 6 in BigEndian
+	PS2 = 0x325350 # PS2 as string
+	PSP = 0x505350 # PSP as string
 
 
 # -------------------------------------------------------------------------------------------------
@@ -175,6 +201,8 @@ def deserialize_chunk_struct(chunk):
 		chunk.struct = MaterialListStruct(parser)
 	elif chunk.get_parent().get_type() == ChunkType.MATERIAL:
 		chunk.struct = MaterialStruct(parser)
+	elif chunk.get_parent().get_type() == ChunkType.TEXTURENATIVE:
+		chunk.struct = TextureNativeStruct(parser)
 	elif chunk.get_parent().get_type() == ChunkType.ATOMIC:
 		chunk.struct = AtomicStruct(parser)
 	elif chunk.get_parent().get_type() == ChunkType.GEOMETRYLIST:
@@ -344,6 +372,23 @@ class MaterialListStruct(Struct):
 		#assert self.num_materials == 255 # @testing, ap.bsp
 		# skipping the material instance stuff
 		br.seek(self.num_materials * 4, os.SEEK_CUR)
+
+
+# -------------------------------------------------------------------------------------------------
+class TextureNativeStruct(Struct):
+	def __init__(self, br):
+		super().__init__()
+		self.platform = TexturePlatform(br.read_uint32())
+		# @todo
+		self.size = br.read_uint32() # maybe
+		self.name = br.read_bytes(128).decode('utf-8', 'ignore').split('\x00', 1)[0] # eh
+		self.alpha = br.read_bytes(128).decode('utf-8', 'ignore').split('\x00', 1)[0] # eh
+		self.flags = br.read_uint32()
+		if (self.flags & TextureAttrbutes.MIPMAPS):
+			print('has mipmaps!')
+		if (self.flags & TextureAttrbutes.AUTOMIPMAPS):
+			print('has auto mipmaps!')
+		# @todo
 
 
 # -------------------------------------------------------------------------------------------------
@@ -638,7 +683,7 @@ def Chunky(filename):
 		elif extension == 'tdx':
 			root = process_chunk(br, None)
 			with open(f'./tests/data/{scenename}-tdx.json', 'w') as out:
-				json.dump(root.toJSON(), out, indent=4)
+				json.dump(root.toJSON(), out, indent=4, default=str)
 			return root
 
 		return None

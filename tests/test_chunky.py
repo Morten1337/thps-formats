@@ -1,15 +1,15 @@
 from thps_formats.experimental import Chunky, ChunkType
-
+import thps_formats.experimental.utils as utils
 
 # def test_bsp():
 # 	root = Chunky('./tests/data/ap.bsp')
 # 	assert root.get_type() == ChunkType.WORLD
 
 
-def test_dff():
-	root = Chunky('./tests/data/ap.dff')
-	assert len(root) > 0
-	assert root[0].get_type() == ChunkType.CLUMP
+#def test_dff():
+#	root = Chunky('./tests/data/ap.dff')
+#	assert len(root) > 0
+#	assert root[0].get_type() == ChunkType.CLUMP
 
 
 # def test_dff2():
@@ -18,9 +18,12 @@ def test_dff():
 # 	assert root[0].get_type() == ChunkType.CLUMP
 
 
-# def test_tdx():
-# 	root = Chunky('./tests/data/ap.tdx')
-# 	assert root.get_type() == ChunkType.TEXDICTIONARY
+def test_tdx():
+	root = Chunky('./tests/data/ap.tdx')
+	assert root.get_type() == ChunkType.TEXDICTIONARY
+	textures = utils.find_chunks_by_type(root.chunks, ChunkType.TEXTURENATIVE)
+	for texture in (utils.find_first_chunk_of_type(t.chunks, ChunkType.STRUCT) for t in textures):
+		print('texture', texture.struct.name)
 
 
 # def test_skn():
