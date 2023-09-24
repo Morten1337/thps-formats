@@ -6,8 +6,8 @@ from pathlib import Path as Path
 from thps_formats.utils.reader import BinaryReader
 from . enums import ChunkType
 from . utils import (
-	find_chunks_by_type,
-	find_first_chunk_of_type
+	find_chunks_with_type,
+	find_first_chunk_with_type
 )
 
 
@@ -565,7 +565,7 @@ class Chunk(object):
 	# 
 	def get_child_struct(self):
 		if len(self.chunks) > 0:
-			return find_first_chunk_of_type(self.chunks, ChunkType.STRUCT).struct
+			return find_first_chunk_with_type(self.chunks, ChunkType.STRUCT).struct
 		return None
 
 	# 
@@ -604,7 +604,7 @@ def to_scene(root, filename):
 		return result
 
 	# -- flatten plane sections
-	plane = find_first_chunk_of_type(root.chunks, ChunkType.PLANESECT)
+	plane = find_first_chunk_with_type(root.chunks, ChunkType.PLANESECT)
 	assert plane.get_type() == ChunkType.PLANESECT
 	atomics = flatten_binary_tree(plane)
 	root.chunks.remove(plane)
@@ -619,8 +619,8 @@ def to_scene(root, filename):
 	#	json.dump([chunk.toJSON() for chunk in atomics], out, indent=4)
 
 	def handle_materials(root):
-		container = find_first_chunk_of_type(root.chunks, ChunkType.MATLIST)
-		materials = find_chunks_by_type(container.chunks, ChunkType.MATERIAL)
+		container = find_first_chunk_with_type(root.chunks, ChunkType.MATLIST)
+		materials = find_chunks_with_type(container.chunks, ChunkType.MATERIAL)
 	#	print(container)
 	#	print(materials)
 

@@ -21,9 +21,9 @@ import thps_formats.experimental.utils as utils
 def test_tdx():
 	root = Chunky('./tests/data/ap.tdx')
 	assert root.get_type() == ChunkType.TEXDICTIONARY
-	textures = utils.find_chunks_by_type(root.chunks, ChunkType.TEXTURENATIVE)
-	for texture in (utils.find_first_chunk_of_type(t.chunks, ChunkType.STRUCT) for t in textures):
-		print('texture', texture.struct.name)
+	textures = utils.find_chunks_with_type(root.chunks, ChunkType.TEXTURENATIVE)
+	for texture in (t.get_child_struct() for t in textures):
+		print('texture', texture.name)
 
 
 # def test_skn():
