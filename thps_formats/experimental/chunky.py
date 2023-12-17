@@ -21,7 +21,6 @@ from . utils import (
 # steps:
 # - recursively read chunks
 # 	- de-serialize structs
-# 	- de-serialize structs
 # 	- de-serialize other chunks
 # - flatten plane section 
 # - convert to shared scene structure
@@ -31,9 +30,6 @@ from . utils import (
 # - texture extensions
 # - triangles??
 # - collision and bsp stuff – for completeness 
-
-# -------------------------------------------------------------------------------------------------
-WORLD_GLOBAL = {'flags': 0} # @tmp hack
 
 
 # -------------------------------------------------------------------------------------------------
@@ -212,7 +208,7 @@ def deserialize_chunk_struct(chunk):
 	elif chunk.get_parent().get_type() == ChunkType.TEXTURE:
 		chunk.struct = TextureStruct(parser)
 	elif chunk.get_parent().get_type() == ChunkType.ATOMICSECT:
-		chunk.struct = AtomicSectionStruct(parser)
+		chunk.struct = AtomicSectionStruct(parser, chunk)
 	elif chunk.get_parent().get_type() == ChunkType.CLUMP:
 		chunk.struct = ClumpStruct(parser)
 	elif chunk.get_parent().get_type() == ChunkType.FRAMELIST:
@@ -361,7 +357,6 @@ class WorldStruct(Struct):
 		self.num_atomics = br.read_uint32()
 		self.collision_sector_size = br.read_uint32()
 		self.flags = br.read_uint32()
-		WORLD_GLOBAL['flags'] = self.flags # @tmp hack
 
 
 # -------------------------------------------------------------------------------------------------
@@ -469,7 +464,7 @@ class TextureStruct(Struct):
 
 # -------------------------------------------------------------------------------------------------
 class AtomicSectionStruct(Struct):
-	def __init__(self, br):
+	def __init__(self, br, chunk):
 		super().__init__()
 		self.unk00 = br.read_uint32() # @todo, material list window base?
 		self.num_triangles = br.read_uint32()
@@ -478,13 +473,14 @@ class AtomicSectionStruct(Struct):
 		br.seek(4, os.SEEK_CUR) # possibly collision sector flag?
 		br.seek(4, os.SEEK_CUR) # unused?
 		self.vertices = [br.read_vec3() for _ in range(self.num_vertices)]
-		if (WORLD_GLOBAL['flags'] & GeometryFlags.NORMALS):
+		world = chunk.get_root().get_child_struct()
+		if (world.flags & GeometryFlags.NORMALS):
 			br.seek(self.num_vertices * 4, os.SEEK_CUR)
 		self.colors = [br.read_uint32() for _ in range(self.num_vertices)]
 		self.uvs = [br.read_vec2() for _ in range(self.num_vertices)]
 		if any([
-			(WORLD_GLOBAL['flags'] & GeometryFlags.MODULATEMATERIALCOLOR),
-			(WORLD_GLOBAL['flags'] & GeometryFlags.TEXTURED2)
+			(world.flags & GeometryFlags.MODULATEMATERIALCOLOR),
+			(world.flags & GeometryFlags.TEXTURED2)
 		]):
 			br.seek(self.num_vertices * 8, os.SEEK_CUR)
 		# @todo
@@ -567,6 +563,13 @@ class Chunk(object):
 		if len(self.chunks) > 0:
 			return find_first_chunk_with_type(self.chunks, ChunkType.STRUCT).struct
 		return None
+
+	# 
+	def get_root(self):
+		current = self
+		while current.parent:
+			current = current.parent
+		return current
 
 	# 
 	def get_parent(self):
