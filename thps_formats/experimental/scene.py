@@ -1,5 +1,8 @@
 # scene>sector>split
 
+# maybe use this library?
+# - https://github.com/niftools/pyffi/blob/develop/pyffi/utils/trianglestripifier.py
+
 # generic format:
 # - sector contains all vertices in arrays
 # - triangles stored per split/mesh
@@ -17,6 +20,7 @@
 # thug2 notes:
 # - interleaved vertices per split/mesh
 # - triangle strips stored per split/mesh
+# - mutliple vertex buffers per split/mesh
 
 # blender collision notes:
 # - does not handle double sided triangles
