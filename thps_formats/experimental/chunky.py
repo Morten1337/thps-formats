@@ -489,9 +489,7 @@ class AtomicSectionStruct(Struct):
 
 # -------------------------------------------------------------------------------------------------
 class Chunk(object):
-	"""
-		For de-serialized the MaterialList Struct-chunk
-	"""
+
 	raw = None
 	data = None
 	struct = None
