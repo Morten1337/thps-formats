@@ -5,7 +5,7 @@ def count_chunks_with_type(chunks, target_type):
 
 	Args:
 		chunks (list): List of chunks to search.
-		target_type (str): The target type to count.
+		target_type (ChunkType): The target type to count.
 
 	Returns:
 		int: The count of chunks with the specified type.
@@ -20,7 +20,7 @@ def find_chunks_with_type(chunks, target_type):
 
 	Args:
 		chunks (list): List of chunks to search.
-		target_type (str): The target type to filter.
+		target_type (ChunkType): The target type to filter.
 
 	Returns:
 		list: List of chunks matching the specified type.
@@ -35,7 +35,7 @@ def find_first_chunk_with_type(chunks, target_type):
 
 	Args:
 		chunks (list): List of chunks to search.
-		target_type (str): The target type to search for.
+		target_type (ChunkType): The target type to search for.
 
 	Returns:
 		object: The first chunk with the specified type or None if not found.

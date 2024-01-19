@@ -595,21 +595,21 @@ class Chunk(object):
 # -------------------------------------------------------------------------------------------------
 def to_scene(root, filename):
 
-	def flatten_binary_tree(root):
+	def flatten_binary_tree(root, target_type):
 
-		if root.get_type() == ChunkType.ATOMICSECT:
+		if root.get_type() == target_type:
 			return [root]
 
 		result = []
 		for chunk in root.chunks:
-			result.extend(flatten_binary_tree(chunk))
+			result.extend(flatten_binary_tree(chunk, target_type))
 
 		return result
 
 	# -- flatten plane sections
 	plane = find_first_chunk_with_type(root.chunks, ChunkType.PLANESECT)
 	assert plane.get_type() == ChunkType.PLANESECT
-	atomics = flatten_binary_tree(plane)
+	atomics = flatten_binary_tree(plane, ChunkType.ATOMICSECT)
 	root.chunks.remove(plane)
 	root.chunks.extend(atomics)
 
