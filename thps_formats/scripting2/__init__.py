@@ -1,2 +1,3 @@
 from . qb import QB
-__all__ = [QB]
+from . enums import TokenType
+__all__ = [QB, TokenType]
