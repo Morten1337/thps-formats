@@ -327,8 +327,7 @@ class QTokenIterator:
 			('INTERNAL_LABEL', r'\b[a-zA-Z_][a-zA-Z0-9_]*:(?!:)'), # Jump label
 			('INTERNAL_IDENTIFIER', r'\b[a-zA-Z_][a-zA-Z0-9_]*\b'), # Identifiers
 
-			('SKIP', r'[ \t]+'), # Skip spaces and tabs
-			('NEWLINE', r'\n'), # Newlines
+			('WHITESPACE', r'[ \t]+'), # Skip spaces and tabs
 			('MISMATCH', r'.'), # Any other character
 		]
 		self.tok_regex = '|'.join('(?P<%s>%s)' % pair for pair in self.token_specs)
@@ -475,7 +474,7 @@ class QTokenIterator:
 				elif kind == 'ALLARGS':
 					kind, value = (TokenType.ALLARGS, None)
 
-				elif kind in ('INTERNAL_COMMENTINLINE', 'SKIP', 'MISMATCH', 'NEWLINE'):
+				elif kind in ('INTERNAL_COMMENTINLINE', 'WHITESPACE', 'MISMATCH'):
 					if kind == 'MISMATCH':
 						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
 						raise NotImplementedError(f'Unexpected token `{value}` at line {index}....')
@@ -489,6 +488,9 @@ class QTokenIterator:
 					'type': kind,
 					'value': value,
 					'index': index,
+					'source': stripped_line,
+					'start': mo.start(),
+					'end': mo.end(),
 				}
 				yield token
 
@@ -525,7 +527,6 @@ class QB:
 			except Exception as exeption:
 				print(exeption)
 				qb.data = None
-				return qb
 		return qb
 
 	# ---------------------------------------------------------------------------------------------
@@ -547,60 +548,95 @@ class QB:
 		print('')
 		print('---- tokens --------------------')
 
+		# -----------------------------------------------------------------------------------------
+		def get_next_token(tokens):
+			try:
+				return next(tokens)
+			except StopIteration:
+				return None
+
+		# -----------------------------------------------------------------------------------------
 		token_type_eol = TokenType.ENDOFLINENUMBER if debug else TokenType.ENDOFLINE
 
+		# -----------------------------------------------------------------------------------------
+		previous_line = 0
 		parsing_script = False
 		current_script_name = None
-		previous_line = 0
+		current_token = None
+		iterator = iter(QTokenIterator(source))
 
-		iterator = QTokenIterator(source)
-		for token in iterator:
-			token_type = token['type']
-			current_line = token['index']
+		# -----------------------------------------------------------------------------------------
+		while (current_token := get_next_token(iterator)) is not None:
+			current_token_type = current_token['type']
+			current_line = current_token['index']
 
+			# @todo: it would be better if the tokenizer could handle the ENDOFLINE tokens,
+			# so that we don't have to construct them here. we also need to be able to peek
+			# to see if the next token is an ENDOFLINE token, which is not possible right now...
 			if current_line > previous_line:
 				previous_line = current_line
 				if len(self.tokens) > 0:
 					if self.tokens[-1]['type'] is not token_type_eol:
 						self.tokens.append({
 							'type': token_type_eol,
-							'value': None,
+							'value': current_line,
 							'index': current_line
 						})
 						self.data.append(token_type_eol) # @todo: actually include line number for debug 
 
-			if token_type is TokenType.KEYWORD_SCRIPT:
+			if current_token_type is TokenType.KEYWORD_SCRIPT:
 				if parsing_script:
 					raise InvalidFormatError(F"Unexpected `script` keyword while already inside a script at line {current_line}...")
-				parsing_script = True
-				self.data.append(TokenType.KEYWORD_SCRIPT)
 
-			elif token_type is TokenType.KEYWORD_ENDSCRIPT:
+				next_token = get_next_token(iterator)
+				if next_token['type'] is not TokenType.NAME:
+					print(highlight_error_with_indicator(next_token['source'], next_token['index'], next_token['start'], next_token['end']))
+					raise InvalidFormatError(F"Expected script name but found `{next_token['type']}`...")
+
+				parsing_script = True
+				current_script_name = next_token['value']
+				self.tokens.append(current_token)
+				self.tokens.append(next_token)
+				self.data.append(TokenType.KEYWORD_SCRIPT)
+				self.data.append(TokenType.NAME)
+				self.data.append(resolve_checksum_tuple(next_token['value']))
+				continue
+
+			elif current_token_type is TokenType.KEYWORD_ENDSCRIPT:
 				if not parsing_script:
 					raise InvalidFormatError(F"Unexpected `endscript` keyword without matching script at line {current_line}...")
 				parsing_script = False
 				current_script_name = None
 				self.data.append(TokenType.KEYWORD_ENDSCRIPT)
 
-			elif token_type is TokenType.NAME:
-				if parsing_script and not current_script_name:
-					current_script_name = token['value']
-
+			elif current_token_type is TokenType.NAME:
 				self.data.append(TokenType.NAME)
-				self.data.append(resolve_checksum_tuple(token['value']))
+				self.data.append(resolve_checksum_tuple(current_token['value']))
 
-			elif token_type is TokenType.PAIR:
+			elif current_token_type is TokenType.PAIR:
 				self.data.append(TokenType.PAIR)
-				self.data.append(token['value'])
+				self.data.append(current_token['value'])
 
-			elif token_type is TokenType.KEYWORD_RANDOMRANGE or token_type is TokenType.KEYWORD_RANDOMRANGE2:
+			elif current_token_type is TokenType.KEYWORD_RANDOMRANGE or current_token_type is TokenType.KEYWORD_RANDOMRANGE2:
 				if not parsing_script:
-					raise InvalidFormatError(F"RandomRange keyword can only be used inside scripts {current_line}...")
+					raise InvalidFormatError(F"`RandomRange` keyword can only be used inside scripts {current_line}...")
 
-			elif token_type is TokenType.KEYWORD_RANDOMNOREPEAT:
-				print(F'{Fore.BLUE}Got `RandomNoRepeat` keyword and expect the next token to be a `OPENPARENTH`!')
+				next_token = get_next_token(iterator)
+				if next_token['type'] is not TokenType.PAIR:
+					print(highlight_error_with_indicator(next_token['source'], next_token['index'], next_token['start'], next_token['end']))
+					raise InvalidFormatError(F"Expected `{TokenType.PAIR}` token proceeding `{current_token_type}`, but found `{next_token['type']}`...")
 
-			self.tokens.append(token)
+				self.tokens.append(current_token)
+				self.tokens.append(next_token)
+				self.data.append(current_token_type)
+				self.data.append(TokenType.PAIR)
+				self.data.append(next_token['value'])
+				continue
+
+			elif current_token_type is TokenType.KEYWORD_RANDOMNOREPEAT:
+				print(F"{Fore.BLUE}Got `RandomNoRepeat` keyword and expect the next token to be a `OPENPARENTH`!")
+
+			self.tokens.append(current_token)
 
 		# @todo this should go after the debug table
 		self.tokens.append({
