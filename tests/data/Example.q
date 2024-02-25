@@ -181,12 +181,15 @@ script AtTest
 	)
 endscript
 
+
 script RandomTest
 	Obj_PlaySound {
 		vol = RandomRange(0.1,3.0)
 		pitch = RandomRange2(1,40)
 	}
 endscript
+
+//GlobalRandomInvalid = RandomRange(0.1,3.0) ; fail
 
 script HashTest
 	// this is fine
@@ -241,3 +244,15 @@ endscript
 		Helloooo
 	#endif
 #endif
+
+script OperatorTest
+//	something = 0 >> 1
+//	something = 0 << 1
+//	something = 0 | 1 ; fail
+//	something = 0 & 1 ; fail
+endscript
+
+script HexTest
+	#"0xf625ce04" = 0x00000000
+	#"0x738c9ade" = <#"0xf625ce04">
+endscript

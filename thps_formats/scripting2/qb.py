@@ -12,7 +12,6 @@ from . crc32 import crc32_generate
 colorama.init(autoreset=True)
 
 # --- todo ----------------------------------------------------------------------------------------
-# - EOL and EOF tokens
 # - tokenizer->lexer->compiler
 # - token post-processing
 # 	- Script, Arrays, Structs, Parentheses - scopes
@@ -301,7 +300,6 @@ class QTokenIterator:
 
 			('OR', r'\|\|'), # Logical OR
 			('AND', r'&&'), # Logical AND
-			('COLON', r'::'),
 
 			('SHIFTRIGHT', r'>>'),
 			('SHIFTLEFT', r'<<'),
@@ -314,6 +312,7 @@ class QTokenIterator:
 
 			('FLOAT', r'-?\b\d+\.\d*|-?\.\d+\b'), # Matches floats with leading digits, or starting with a dot
 			('INTEGER', r'-?\b\d+\b'), # Matches integers, possibly negative
+			('HEXINTEGER', r'(?<!")0x[0-9A-Fa-f]+(?!")'),
 
 			('ADD', r'\+'),
 			('MINUS', r'(?<!\d)-(?!\d)'), # Negative lookahead and lookbehind to avoid matching negative numbers
@@ -322,9 +321,10 @@ class QTokenIterator:
 			('DOT', r'\.(?!\d)'),
 			('AT', r'@'),
 			('COMMA', r','),
+			('COLON', r'::'),
 
 			('INTERNAL_HASHTAG', r'#\w*'),
-			('INTERNAL_LABEL', r'\b[a-zA-Z_][a-zA-Z0-9_]*:'), # Jump label
+			('INTERNAL_LABEL', r'\b[a-zA-Z_][a-zA-Z0-9_]*:(?!:)'), # Jump label
 			('INTERNAL_IDENTIFIER', r'\b[a-zA-Z_][a-zA-Z0-9_]*\b'), # Identifiers
 
 			('SKIP', r'[ \t]+'), # Skip spaces and tabs
@@ -383,6 +383,8 @@ class QTokenIterator:
 
 				elif kind == 'INTEGER':
 					kind, value = (TokenType.INTEGER, int(value))
+				elif kind == 'HEXINTEGER':
+					kind, value = (TokenType.INTEGER, int(value, 0))
 
 				elif kind == 'STRING':
 					if value[0] == '\"':
@@ -541,17 +543,31 @@ class QB:
 		return qb
 
 	# ---------------------------------------------------------------------------------------------
-	def compile(self, source):
+	def compile(self, source, debug=True):
 		print('')
 		print('---- tokens --------------------')
 
+		token_type_eol = TokenType.ENDOFLINENUMBER if debug else TokenType.ENDOFLINE
+
 		parsing_script = False
 		current_script_name = None
+		previous_line = 0
 
 		iterator = QTokenIterator(source)
 		for token in iterator:
 			token_type = token['type']
 			current_line = token['index']
+
+			if current_line > previous_line:
+				previous_line = current_line
+				if len(self.tokens) > 0:
+					if self.tokens[-1]['type'] is not token_type_eol:
+						self.tokens.append({
+							'type': token_type_eol,
+							'value': None,
+							'index': current_line
+						})
+						self.data.append(token_type_eol) # @todo: actually include line number for debug 
 
 			if token_type is TokenType.KEYWORD_SCRIPT:
 				if parsing_script:
@@ -562,7 +578,6 @@ class QB:
 			elif token_type is TokenType.KEYWORD_ENDSCRIPT:
 				if not parsing_script:
 					raise InvalidFormatError(F"Unexpected `endscript` keyword without matching script at line {current_line}...")
-				print(F'{Fore.RED}Closing script with name {current_script_name}')
 				parsing_script = False
 				current_script_name = None
 				self.data.append(TokenType.KEYWORD_ENDSCRIPT)
@@ -570,17 +585,33 @@ class QB:
 			elif token_type is TokenType.NAME:
 				if parsing_script and not current_script_name:
 					current_script_name = token['value']
-					print(F'{Fore.BLUE}Got script name {current_script_name}')
 
 				self.data.append(TokenType.NAME)
 				self.data.append(resolve_checksum_tuple(token['value']))
 
-			elif token_type is TokenType.KEYWORD_RANDOMRANGE:
-				print(F'{Fore.BLUE}Got `RandomRange` keyword and expect the next token to be a `PAIR`!')
+			elif token_type is TokenType.PAIR:
+				self.data.append(TokenType.PAIR)
+				self.data.append(token['value'])
+
+			elif token_type is TokenType.KEYWORD_RANDOMRANGE or token_type is TokenType.KEYWORD_RANDOMRANGE2:
+				if not parsing_script:
+					raise InvalidFormatError(F"RandomRange keyword can only be used inside scripts {current_line}...")
+
 			elif token_type is TokenType.KEYWORD_RANDOMNOREPEAT:
 				print(F'{Fore.BLUE}Got `RandomNoRepeat` keyword and expect the next token to be a `OPENPARENTH`!')
 
 			self.tokens.append(token)
+
+		# @todo this should go after the debug table
+		self.tokens.append({
+			'type': TokenType.ENDOFFILE,
+			'value': None,
+			'index': current_line
+		})
+		self.data.append(TokenType.ENDOFFILE)
+
+		# ---- debugging --------------------------------------------------------------------------
+		for token in self.tokens:
 			print(token)
 
 	# ---------------------------------------------------------------------------------------------
