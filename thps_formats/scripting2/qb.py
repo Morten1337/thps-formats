@@ -340,15 +340,20 @@ class QTokenIterator:
 		# Macro-level validations, including tracking of open braces and other structural 
 		# considerations, should be performed by the calling function.
 
+		previous_token_type = TokenType.KEYWORD_UNDEFINED
+
 		for index, line in self.lines:
 
 			stripped_line = line.strip()
+			length_of_line = len(stripped_line)
 
 			# skipping whitespace...
 			if not stripped_line:
 				continue
 
 			for mo in re.finditer(self.tok_regex, stripped_line, flags=re.IGNORECASE):
+
+				# @todo: should not re-use these for return data  
 				kind = mo.lastgroup
 				value = mo.group()
 
@@ -484,7 +489,9 @@ class QTokenIterator:
 					print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
 					raise NotImplementedError(f'The lexer token `{kind}` has not been handled properly...')
 
-				token = {
+				previous_token_type = kind
+
+				yield {
 					'type': kind,
 					'value': value,
 					'index': index,
@@ -492,7 +499,17 @@ class QTokenIterator:
 					'start': mo.start(),
 					'end': mo.end(),
 				}
-				yield token
+
+			if previous_token_type is not TokenType.ENDOFLINE:
+				previous_token_type = TokenType.ENDOFLINE
+				yield {
+					'type': TokenType.ENDOFLINE,
+					'value': index,
+					'index': index,
+					'source': stripped_line,
+					'start': length_of_line,
+					'end': length_of_line + 1,
+				}
 
 
 # -------------------------------------------------------------------------------------------------
@@ -559,7 +576,6 @@ class QB:
 		token_type_eol = TokenType.ENDOFLINENUMBER if debug else TokenType.ENDOFLINE
 
 		# -----------------------------------------------------------------------------------------
-		previous_line = 0
 		parsing_script = False
 		current_script_name = None
 		current_token = None
@@ -570,19 +586,10 @@ class QB:
 			current_token_type = current_token['type']
 			current_line = current_token['index']
 
-			# @todo: it would be better if the tokenizer could handle the ENDOFLINE tokens,
-			# so that we don't have to construct them here. we also need to be able to peek
-			# to see if the next token is an ENDOFLINE token, which is not possible right now...
-			if current_line > previous_line:
-				previous_line = current_line
-				if len(self.tokens) > 0:
-					if self.tokens[-1]['type'] is not token_type_eol:
-						self.tokens.append({
-							'type': token_type_eol,
-							'value': current_line,
-							'index': current_line
-						})
-						self.data.append(token_type_eol) # @todo: actually include line number for debug 
+			if current_token_type is TokenType.ENDOFLINE:
+				self.data.append(token_type_eol)
+				if debug:
+					self.data.append(current_token['value'])
 
 			if current_token_type is TokenType.KEYWORD_SCRIPT:
 				if parsing_script:
@@ -639,12 +646,12 @@ class QB:
 			self.tokens.append(current_token)
 
 		# @todo this should go after the debug table
-		self.tokens.append({
-			'type': TokenType.ENDOFFILE,
-			'value': None,
-			'index': current_line
-		})
-		self.data.append(TokenType.ENDOFFILE)
+		#self.tokens.append({
+		#	'type': TokenType.ENDOFFILE,
+		#	'value': None,
+		#	'index': current_line
+		#})
+		#self.data.append(TokenType.ENDOFFILE)
 
 		# ---- debugging --------------------------------------------------------------------------
 		for token in self.tokens:
