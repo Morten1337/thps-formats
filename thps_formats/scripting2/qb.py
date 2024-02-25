@@ -7,6 +7,12 @@ from pathlib import Path as Path
 
 from . enums import TokenType
 
+from . crc32 import crc32_generate
+
+
+# @warn: probably shouldnt have this here...
+colorama.init(autoreset=True)
+
 # --- todo ----------------------------------------------------------------------------------------
 # - EOL and EOF tokens 
 # - handle checksum/name type representation
@@ -80,6 +86,69 @@ def insert_color_and_reset(text, color, start_index, end_index):
 
 
 # -------------------------------------------------------------------------------------------------
+def extract_numbers_to_tuple(value):
+	stripped_string = re.sub(r'[^\d,.-]', '', value)
+	segments = stripped_string.split(',')
+	# Use list comprehension to process segments
+	numbers = [float(segment) for segment in segments if re.fullmatch(r'^-?\d*\.\d+$', segment) or re.fullmatch(r'^-?\d+$', segment)]
+	# Identify invalid segments
+	invalid_numbers = [segment for segment in segments if not (re.fullmatch(r'^-?\d*\.\d+$', segment) or re.fullmatch(r'^-?\d+$', segment)) and segment]
+	if invalid_numbers:
+		# @todo: print line number and code snippet
+		raise InvalidFormatError(f'Unable to parse one or more numbers in the vector... {invalid_numbers}')
+	return tuple(numbers), len(numbers)
+
+
+# -------------------------------------------------------------------------------------------------
+def tohex(val, nbits):
+	return hex((val + (1 << nbits)) % (1 << nbits))
+
+
+# -------------------------------------------------------------------------------------------------
+def parse_checksum(value):
+	value = value.lower().strip()
+	if value.startswith('0x'):
+		return int(value, 0)
+	else:
+		return int(value)
+
+
+# -------------------------------------------------------------------------------------------------
+def parse_checksum_name(value):
+	pass
+
+
+# -------------------------------------------------------------------------------------------------
+def strip_hash_string_stuff(value):
+	return value[2:-1] # #"hello" -> hello
+
+
+# -------------------------------------------------------------------------------------------------
+def strip_argument_string_stuff(value):
+	return value[1:-1] # <hello> -> hello
+
+
+# -------------------------------------------------------------------------------------------------
+def resolve_checksum_tuple(value):
+
+	# ('Name', 0xA1DC81F9)
+	# (None, 0xa1dc81f9)
+	# ('Name', None)
+
+	if value[0] is not None:
+		checksum = crc32_generate(value[0])
+		print('resolving checksum:', str(hex(checksum)))
+		return checksum
+
+	if value[1] is not None and isinstance(value[1], int):
+		checksum = value[1]
+		print('resolving checksum:', str(hex(checksum)))
+		return checksum
+
+	raise ValueError('Trying to resolve checksum, but no name or checksum was passed...')
+
+
+# -------------------------------------------------------------------------------------------------
 class InvalidFormatError(Exception):
 	pass
 
@@ -119,16 +188,20 @@ class LineIterator:
 # -------------------------------------------------------------------------------------------------
 class QTokenIterator:
 
-	in_block_comment = False
-
+	# ---------------------------------------------------------------------------------------------
 	def __init__(self, lines):
 
+		# used for tracking #defined names
 		self.defined_names = []
+		# keeps track of the current #ifdef scope(s)
 		self.directive_stack_names = []
+		# and whether we should skip parsing the lines or not
 		self.directive_stack_active = [True]
+		# used to determine if we should skip parsing commented lines
+		self.skipping_block_comment = False
 
+		# used by the iterator
 		self.lines = lines
-		self.line_count = 0
 
 		self.token_misc_lookup_table = {
 			'STARTSTRUCT': (TokenType.STARTSTRUCT, None),
@@ -167,7 +240,7 @@ class QTokenIterator:
 			'BREAK': (TokenType.KEYWORD_BREAK, None),
 			'SCRIPT': (TokenType.KEYWORD_SCRIPT, None),
 			'ENDSCRIPT': (TokenType.KEYWORD_ENDSCRIPT, None),
-			'IF': (TokenType.KEYWORD_ENDSCRIPT, None),
+			'IF': (TokenType.KEYWORD_IF, None),
 			'DOIF': (TokenType.KEYWORD_IF, None),
 			'ELSE': (TokenType.KEYWORD_IF, None),
 			'DOELSE': (TokenType.KEYWORD_ELSE, None),
@@ -211,8 +284,8 @@ class QTokenIterator:
 			('CLOSEPARENTH', r'\)'),
 
 			('ALLARGS', r'<\.\.\.>'),
-			('INTERNAL_ARGUMENTSTRCHECKSUM', r'<#"[^"\n]*">'),
 			('INTERNAL_ARGUMENTHEXCHECKSUM', r'<#"0x[0-9A-Fa-f]+">'),
+			('INTERNAL_ARGUMENTSTRCHECKSUM', r'<#"[^"\n]*">'),
 			('ARGUMENT', r'<[a-zA-Z_][a-zA-Z0-9_]*>'),
 
 			('INTERNAL_INCLUDE', r'#INCLUDE\s+"[^"\n]+"'),
@@ -221,8 +294,8 @@ class QTokenIterator:
 			('INTERNAL_IFDEF', r'#IFDEF\s+[a-zA-Z_][a-zA-Z0-9_]*'),
 			('INTERNAL_IFNDEF', r'#IFNDEF\s+[a-zA-Z_][a-zA-Z0-9_]*'),
 			('INTERNAL_GOTO', r'#GOTO\s+[a-zA-Z_][a-zA-Z0-9_]*'),
-			('INTERNAL_STRCHECKSUM', r'#"[^"\n]*"'),
 			('INTERNAL_HEXCHECKSUM', r'#"0x[0-9A-Fa-f]+?"'),
+			('INTERNAL_STRCHECKSUM', r'#"[^"\n]*"'),
 
 			('INTERNAL_ELSEDEF', r'#ELSE'),
 			('INTERNAL_ENDIFDEF', r'#ENDIF'),
@@ -261,167 +334,162 @@ class QTokenIterator:
 		]
 		self.tok_regex = '|'.join('(?P<%s>%s)' % pair for pair in self.token_specs)
 
-	# -------------------------------------------------------------------------------------------------
-	def extract_numbers_to_tuple(self, value):
-		stripped_string = re.sub(r'[^\d,.-]', '', value)
-		segments = stripped_string.split(',')
-		# Use list comprehension to process segments
-		numbers = [float(segment) for segment in segments if re.fullmatch(r'^-?\d*\.\d+$', segment) or re.fullmatch(r'^-?\d+$', segment)]
-		# Identify invalid segments
-		invalid_numbers = [segment for segment in segments if not (re.fullmatch(r'^-?\d*\.\d+$', segment) or re.fullmatch(r'^-?\d+$', segment)) and segment]
-		if invalid_numbers:
-			# @todo: print line number and code snippet
-			raise InvalidFormatError(f'Unable to parse one or more numbers in the vector... {invalid_numbers}')
-		return tuple(numbers), len(numbers)
-
-	def tokenize_line(self, line, index):
-		for mo in re.finditer(self.tok_regex, line, flags=re.IGNORECASE):
-			kind = mo.lastgroup
-			value = mo.group()
-
-			if self.in_block_comment:
-				if kind == 'INTERNAL_COMMENTBLOCKEND':
-					self.in_block_comment = False
-				continue # Ignore all tokens until block comment is closed
-			elif kind == 'INTERNAL_COMMENTBLOCKBEGIN':
-				self.in_block_comment = True
-				continue
-
-			if kind != 'INTERNAL_ELSEDEF' and kind != 'INTERNAL_ENDIFDEF':
-				if not self.directive_stack_active[-1]:
-					continue
-
-			if kind == 'INTERNAL_VECTOR':
-				try:
-					result, count = self.extract_numbers_to_tuple(value)
-					if count == 2:
-						kind, value = (TokenType.PAIR, result)
-					elif count == 3:
-						kind, value = (TokenType.VECTOR, result)
-					else:
-						raise InvalidFormatError(f'Unexpected number of elements found when parsing vector: {count} detected... {value}')
-				except InvalidFormatError as ex:
-					print(highlight_error_with_indicator(line, index, mo.start(), mo.end()))
-					raise ex
-
-			elif kind == 'FLOAT':
-				kind, value = (TokenType.FLOAT, float(value))
-
-			elif kind == 'INTEGER':
-				kind, value = (TokenType.INTEGER, int(value))
-
-			elif kind == 'STRING':
-				if value[0] == '\"':
-					kind, value = (TokenType.STRING, str(value[1:-1]))
-				else:
-					kind, value = (TokenType.LOCALSTRING, str(value[1:-1]))
-
-			elif kind in self.token_misc_lookup_table.keys():
-				kind, value = self.token_misc_lookup_table.get(kind) 
-
-			elif kind in self.token_operator_lookup_table.keys():
-				kind, value = self.token_operator_lookup_table.get(kind) 
-
-			elif kind == 'INTERNAL_HASHTAG':
-				print(highlight_error_with_indicator(line, index, mo.start(), mo.end()))
-				raise NotImplementedError(f'Unsupported hashtag `{value}` at line {index}...')
-
-			elif kind == 'INTERNAL_IDENTIFIER':
-				keyword = value.upper()
-				if keyword in self.token_keyword_lookup_table.keys():
-					kind, value = self.token_keyword_lookup_table.get(keyword)
-				else:
-					print(f'Assuming the identifier "{value}" is a `TokenType.NAME`')
-					kind, value = (TokenType.NAME, (value, None))
-
-			elif kind == 'INTERNAL_INCLUDE':
-				kind, value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1])
-				print(F'Parsing #include with path `{value}`')
-			elif kind == 'INTERNAL_RAW':
-				kind, value = (TokenType.INTERNAL_RAW, value.split(' ')[1])
-				print(F'Parsing #raw with bytes `{value}`')
-
-			elif kind == 'INTERNAL_DEFINE':
-				kind, value = (TokenType.INTERNAL_DEFINE, value.split(' ')[1])
-				self.defined_names.append(value)
-				continue
-
-			elif kind == 'INTERNAL_IFDEF':
-				kind, value = (TokenType.INTERNAL_IFDEF, value.split(' ')[1])
-				self.directive_stack_names.append(value)
-				self.directive_stack_active.append(value in self.defined_names and self.directive_stack_active[-1])
-				continue
-
-			elif kind == 'INTERNAL_IFNDEF':
-				kind, value = (TokenType.INTERNAL_IFNDEF, value.split(' ')[1])
-				self.directive_stack_names.append(value)
-				self.directive_stack_active.append(value not in self.defined_names and self.directive_stack_active[-1])
-				continue
-
-			elif kind == 'INTERNAL_ELSEDEF':
-				kind, value = (TokenType.INTERNAL_ELSEDEF, self.directive_stack_names[-1])
-				if self.directive_stack_active[-2]: # Check the second last item for the outer context's state
-					self.directive_stack_active[-1] = not self.directive_stack_active[-1]
-				continue
-
-			elif kind == 'INTERNAL_ENDIFDEF':
-				self.directive_stack_active.pop()
-				kind, value = (TokenType.INTERNAL_ENDIFDEF, self.directive_stack_names.pop())
-				continue
-
-			elif kind == 'INTERNAL_GOTO':
-				kind, value = (TokenType.INTERNAL_GOTO, value.split(' ')[1])
-				print(F'Parsing #goto with name `{value}`')
-			elif kind == 'INTERNAL_LABEL':
-				kind, value = (TokenType.INTERNAL_LABEL, value.split(':')[0])
-				print(F'Parsing label with name `{value}`')
-
-			elif kind == 'INTERNAL_STRCHECKSUM':
-				kind, value = (TokenType.NAME, (value, None))
-			elif kind == 'INTERNAL_HEXCHECKSUM':
-				kind, value = (TokenType.NAME, (None, value))
-
-			elif kind == 'INTERNAL_ARGUMENTSTRCHECKSUM':
-				kind, value = (TokenType.ARGUMENT, (value, None))
-			elif kind == 'INTERNAL_ARGUMENTHEXCHECKSUM':
-				kind, value = (TokenType.ARGUMENT, (None, value))
-			elif kind == 'ARGUMENT':
-				kind, value = (TokenType.ARGUMENT, (value, None))
-			elif kind == 'ALLARGS':
-				kind, value = (TokenType.ALLARGS, None)
-
-			elif kind in ('INTERNAL_COMMENTINLINE', 'SKIP', 'MISMATCH', 'NEWLINE'):
-				if kind == 'MISMATCH':
-					print(highlight_error_with_indicator(line, index, mo.start(), mo.end()))
-					raise NotImplementedError(f'Unexpected token `{value}` at line {index}....')
-				continue # Skip spaces, newlines, and mismatches
-
-			if type(kind) != TokenType:
-				print(highlight_error_with_indicator(line, index, mo.start(), mo.end()))
-				raise NotImplementedError(f'The lexer token `{kind}` has not been handled properly...')
-
-			yield kind, value
-
+	# ---------------------------------------------------------------------------------------------
 	def __iter__(self):
+
+		# @note: This method validates token types on a syntactical (micro) level only,
+		# such as checking if the token type is recognized and can be parsed successfully.
+		# Macro-level validations, including tracking of open braces and other structural 
+		# considerations, should be performed by the calling function.
+
 		for index, line in self.lines:
-			self.line_count = index
+
+			stripped_line = line.strip()
 
 			# skipping whitespace...
-			if not line.strip():
+			if not stripped_line:
 				continue
 
-			for kind, value in self.tokenize_line(line.strip(), index):
+			for mo in re.finditer(self.tok_regex, stripped_line, flags=re.IGNORECASE):
+				kind = mo.lastgroup
+				value = mo.group()
+
+				if self.skipping_block_comment:
+					if kind == 'INTERNAL_COMMENTBLOCKEND':
+						self.skipping_block_comment = False
+					continue # Ignore all tokens until block comment is closed
+				elif kind == 'INTERNAL_COMMENTBLOCKBEGIN':
+					self.skipping_block_comment = True
+					continue
+
+				if kind != 'INTERNAL_ELSEDEF' and kind != 'INTERNAL_ENDIFDEF':
+					if not self.directive_stack_active[-1]:
+						continue
+
+				if kind == 'INTERNAL_VECTOR':
+					try:
+						result, count = extract_numbers_to_tuple(value)
+						if count == 2:
+							kind, value = (TokenType.PAIR, result)
+						elif count == 3:
+							kind, value = (TokenType.VECTOR, result)
+						else:
+							raise InvalidFormatError(f'Unexpected number of elements found when parsing vector: {count} detected... {value}')
+					except InvalidFormatError as ex:
+						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+						raise ex
+
+				elif kind == 'FLOAT':
+					kind, value = (TokenType.FLOAT, float(value))
+
+				elif kind == 'INTEGER':
+					kind, value = (TokenType.INTEGER, int(value))
+
+				elif kind == 'STRING':
+					if value[0] == '\"':
+						kind, value = (TokenType.STRING, str(value[1:-1]))
+					else:
+						kind, value = (TokenType.LOCALSTRING, str(value[1:-1]))
+
+				elif kind in self.token_misc_lookup_table.keys():
+					kind, value = self.token_misc_lookup_table.get(kind) 
+
+				elif kind in self.token_operator_lookup_table.keys():
+					kind, value = self.token_operator_lookup_table.get(kind) 
+
+				elif kind == 'INTERNAL_HASHTAG':
+					print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+					raise NotImplementedError(f'Unsupported hashtag `{value}` at line {index}...')
+
+				elif kind == 'INTERNAL_IDENTIFIER':
+					keyword = value.upper()
+					if keyword in self.token_keyword_lookup_table.keys():
+						kind, value = self.token_keyword_lookup_table.get(keyword)
+					else:
+						print(f'Assuming the identifier "{value}" is a `TokenType.NAME`')
+						kind, value = (TokenType.NAME, (value, None))
+
+				elif kind == 'INTERNAL_INCLUDE':
+					kind, value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1])
+					print(F'Parsing #include with path `{value}`')
+				elif kind == 'INTERNAL_RAW':
+					kind, value = (TokenType.INTERNAL_RAW, value.split(' ')[1])
+					print(F'Parsing #raw with bytes `{value}`')
+
+				elif kind == 'INTERNAL_DEFINE':
+					kind, value = (TokenType.INTERNAL_DEFINE, value.split(' ')[1])
+					self.defined_names.append(value)
+					continue
+
+				elif kind == 'INTERNAL_IFDEF':
+					kind, value = (TokenType.INTERNAL_IFDEF, value.split(' ')[1])
+					self.directive_stack_names.append(value)
+					self.directive_stack_active.append(value in self.defined_names and self.directive_stack_active[-1])
+					continue
+
+				elif kind == 'INTERNAL_IFNDEF':
+					kind, value = (TokenType.INTERNAL_IFNDEF, value.split(' ')[1])
+					self.directive_stack_names.append(value)
+					self.directive_stack_active.append(value not in self.defined_names and self.directive_stack_active[-1])
+					continue
+
+				elif kind == 'INTERNAL_ELSEDEF':
+					kind, value = (TokenType.INTERNAL_ELSEDEF, self.directive_stack_names[-1])
+					if self.directive_stack_active[-2]: # Check the second last item for the outer context's state
+						self.directive_stack_active[-1] = not self.directive_stack_active[-1]
+					continue
+
+				elif kind == 'INTERNAL_ENDIFDEF':
+					self.directive_stack_active.pop()
+					kind, value = (TokenType.INTERNAL_ENDIFDEF, self.directive_stack_names.pop())
+					continue
+
+				elif kind == 'INTERNAL_GOTO':
+					kind, value = (TokenType.INTERNAL_GOTO, value.split(' ')[1])
+					print(F'Parsing #goto with name `{value}`')
+				elif kind == 'INTERNAL_LABEL':
+					kind, value = (TokenType.INTERNAL_LABEL, value.split(':')[0])
+					print(F'Parsing label with name `{value}`')
+
+				elif kind == 'INTERNAL_STRCHECKSUM':
+					_value = strip_hash_string_stuff(value)
+					kind, value = (TokenType.NAME, (_value, None))
+					print(F'{Fore.BLUE}Got `INTERNAL_STRCHECKSUM` token with the value "{value[0]}"')
+				elif kind == 'INTERNAL_HEXCHECKSUM':
+					_value = strip_hash_string_stuff(value)
+					kind, value = (TokenType.NAME, (None, int(_value, 0)))
+					print(F'{Fore.BLUE}Got `INTERNAL_HEXCHECKSUM` token with the value {value[1]:#010x}')
+
+				elif kind == 'INTERNAL_ARGUMENTSTRCHECKSUM':
+					_value = strip_hash_string_stuff(strip_argument_string_stuff(value))
+					kind, value = (TokenType.ARGUMENT, (_value, None))
+					print(F'{Fore.BLUE}Got `INTERNAL_ARGUMENTSTRCHECKSUM` token with the value "{value[0]}"')
+				elif kind == 'INTERNAL_ARGUMENTHEXCHECKSUM':
+					_value = strip_hash_string_stuff(strip_argument_string_stuff(value))
+					kind, value = (TokenType.ARGUMENT, (None, int(_value, 0)))
+					print(F'{Fore.BLUE}Got `INTERNAL_ARGUMENTHEXCHECKSUM` token with the value {value[1]:#010x}')
+
+				elif kind == 'ARGUMENT':
+					kind, value = (TokenType.ARGUMENT, (value, None))
+				elif kind == 'ALLARGS':
+					kind, value = (TokenType.ALLARGS, None)
+
+				elif kind in ('INTERNAL_COMMENTINLINE', 'SKIP', 'MISMATCH', 'NEWLINE'):
+					if kind == 'MISMATCH':
+						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+						raise NotImplementedError(f'Unexpected token `{value}` at line {index}....')
+					continue # Skip spaces, newlines, and mismatches
+
+				if type(kind) != TokenType:
+					print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+					raise NotImplementedError(f'The lexer token `{kind}` has not been handled properly...')
+
 				token = {
 					'type': kind,
 					'value': value,
-					'line_index': index,
+					'index': index,
 				}
 				yield token
-
-			# @note: This method validates token types on a syntactical (micro) level only,
-			# such as checking if the token type is recognized and can be parsed successfully.
-			# Macro-level validations, including tracking of open braces and other structural 
-			# considerations, should be performed by the calling function.
 
 
 # -------------------------------------------------------------------------------------------------
@@ -433,9 +501,11 @@ class QB:
 	items = [] # qb items
 	tokens = [] # lexer items
 
+	# ---------------------------------------------------------------------------------------------
 	def __init__(self):
 		pass
 
+	# ---------------------------------------------------------------------------------------------
 	@classmethod
 	def from_file(cls, filename, params):
 		qb = cls() # oaky
@@ -457,6 +527,7 @@ class QB:
 				return qb
 		return qb
 
+	# ---------------------------------------------------------------------------------------------
 	@classmethod
 	def from_string(cls, string, params):
 		qb = cls() # oaky
@@ -470,20 +541,49 @@ class QB:
 
 		return qb
 
+	# ---------------------------------------------------------------------------------------------
 	def compile(self, source):
-		#items = []
-		colorama.init(autoreset=True)
-		try:
-			iterator = QTokenIterator(source)
-			print('')
-			print('---- tokens --------------------')
-			for token in iterator:
-				self.tokens.append(token['type'])
-				print(token)
-		except StopIteration:
-			print("End of file reached")
-		#for token in items:
-		#	print(token)
+		print('')
+		print('---- tokens --------------------')
 
+		parsing_script = False
+		current_script_name = None
+
+		iterator = QTokenIterator(source)
+		for token in iterator:
+			token_type = token['type']
+			current_line = token['index']
+
+			if token_type is TokenType.KEYWORD_SCRIPT:
+				if parsing_script:
+					raise InvalidFormatError(F"Unexpected `script` keyword while already inside a script at line {current_line}...")
+				parsing_script = True
+				self.data.append(TokenType.KEYWORD_SCRIPT)
+
+			elif token_type is TokenType.KEYWORD_ENDSCRIPT:
+				if not parsing_script:
+					raise InvalidFormatError(F"Unexpected `endscript` keyword without matching script at line {current_line}...")
+				print(F'{Fore.RED}Closing script with name {current_script_name}')
+				parsing_script = False
+				current_script_name = None
+				self.data.append(TokenType.KEYWORD_ENDSCRIPT)
+
+			elif token_type is TokenType.NAME:
+				if parsing_script and not current_script_name:
+					current_script_name = token['value']
+					print(F'{Fore.BLUE}Got script name {current_script_name}')
+
+				self.data.append(TokenType.NAME)
+				self.data.append(resolve_checksum_tuple(token['value']))
+
+			elif token_type is TokenType.KEYWORD_RANDOMRANGE:
+				print(F'{Fore.BLUE}Got `RandomRange` keyword and expect the next token to be a `PAIR`!')
+			elif token_type is TokenType.KEYWORD_RANDOMNOREPEAT:
+				print(F'{Fore.BLUE}Got `RandomNoRepeat` keyword and expect the next token to be a `OPENPARENTH`!')
+
+			self.tokens.append(token)
+			print(token)
+
+	# ---------------------------------------------------------------------------------------------
 	def to_file(self, filename, params):
 		return False
