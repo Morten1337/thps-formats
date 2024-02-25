@@ -1,3 +1,4 @@
+//#define __SUPPORT_RANDOM__
 
 complex=0/*
 comment
@@ -173,23 +174,15 @@ script NanTest
 endscript
 
 script AtTest
+#ifdef __SUPPORT_RANDOM__
 	RandomNoRepeat(
 		@Obj_PlaySound SK6_BA_BullGallop01 vol = 80 dropoff = 150
 		@Obj_PlaySound SK6_BA_BullGallop02 vol = 80 dropoff = 150
 		@Obj_PlaySound SK6_BA_BullGallop03 vol = 80 dropoff = 150
 		@Obj_PlaySound SK6_BA_BullGallop04 vol = 80 dropoff = 150
 	)
+#endif // __SUPPORT_RANDOM__
 endscript
-
-
-script RandomTest
-	Obj_PlaySound {
-		vol = RandomRange(0.1,3.0)
-		pitch = RandomRange2(1,40)
-	}
-endscript
-
-//GlobalRandomInvalid = RandomRange(0.1,3.0) ; fail
 
 script HashTest
 	// this is fine
@@ -256,3 +249,30 @@ script HexTest
 	#"0xf625ce04" = 0x00000000
 	#"0x738c9ade" = <#"0xf625ce04">
 endscript
+
+GlobalRandomInvalid = RandomRange(0.1,3.0) ; fail
+script RandomTest
+//	Obj_PlaySound {
+//		vol = RandomRange(0.1,3.0)
+//		pitch = RandomRange2(1,40)
+//	}
+	Something = RandomRange(1,2)
+endscript
+
+script #"ScriptTest"
+	Hello
+endscript
+
+script #"0x6af56176"
+	Hello
+endscript
+
+//script "ScriptTest" ; fail
+//	Hello
+//endscript
+
+//script /* ; fail
+//	Hello
+//	*/
+//endscript
+

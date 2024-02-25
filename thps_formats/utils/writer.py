@@ -1,3 +1,4 @@
+import io
 import struct
 import binascii
 
@@ -5,7 +6,10 @@ import binascii
 class BinaryWriter(object):
 
 	def __init__(self, stream):
-		self.stream = stream
+		if isinstance(stream, bytes):
+			self.stream = io.BytesIO(stream)
+		else:
+			self.stream = stream
 
 	def write_byte(self, value):
 		if type(value) is bytes:

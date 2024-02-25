@@ -1,8 +1,12 @@
-from enum import Enum
+from enum import Enum, IntEnum
 
 
 # -------------------------------------------------------------------------------------------------
 class TokenType(Enum):
+
+	def __int__(self):
+		return self.value
+
 	# Misc
 	ENDOFFILE = 0x00
 	ENDOFLINE = 0x01
@@ -117,3 +121,4 @@ class TokenType(Enum):
 	INTERNAL_GOTO = 0x58
 	INTERNAL_INCLUDE = 0x5F
 	INTERNAL_RAW = 0x60
+

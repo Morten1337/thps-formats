@@ -1,3 +1,4 @@
+import io
 import re
 
 import colorama
@@ -5,6 +6,7 @@ from colorama import Fore, Style
 
 from pathlib import Path as Path
 
+from thps_formats.utils.writer import BinaryWriter
 from . enums import TokenType
 from . crc32 import crc32_generate
 
@@ -135,12 +137,12 @@ def resolve_checksum_tuple(value):
 
 	if value[0] is not None:
 		checksum = crc32_generate(value[0])
-		print('resolving checksum:', str(hex(checksum)))
+		print(F"Resolving checksum {checksum:#010x}")
 		return checksum
 
 	if value[1] is not None and isinstance(value[1], int):
 		checksum = value[1]
-		print('resolving checksum:', str(hex(checksum)))
+		print(F"Resolving checksum {checksum:#010x}")
 		return checksum
 
 	raise ValueError('Trying to resolve checksum, but no name or checksum was passed...')
@@ -187,10 +189,10 @@ class LineIterator:
 class QTokenIterator:
 
 	# ---------------------------------------------------------------------------------------------
-	def __init__(self, lines):
+	def __init__(self, lines, defines=[]):
 
 		# used for tracking #defined names
-		self.defined_names = []
+		self.defined_names = defines
 		# keeps track of the current #ifdef scope(s)
 		self.directive_stack_names = []
 		# and whether we should skip parsing the lines or not
@@ -459,20 +461,16 @@ class QTokenIterator:
 				elif kind == 'INTERNAL_STRCHECKSUM':
 					_value = strip_hash_string_stuff(value)
 					kind, value = (TokenType.NAME, (_value, None))
-					print(F'{Fore.BLUE}Got `INTERNAL_STRCHECKSUM` token with the value "{value[0]}"')
 				elif kind == 'INTERNAL_HEXCHECKSUM':
 					_value = strip_hash_string_stuff(value)
 					kind, value = (TokenType.NAME, (None, int(_value, 0)))
-					print(F'{Fore.BLUE}Got `INTERNAL_HEXCHECKSUM` token with the value {value[1]:#010x}')
 
 				elif kind == 'INTERNAL_ARGUMENTSTRCHECKSUM':
 					_value = strip_hash_string_stuff(strip_argument_string_stuff(value))
 					kind, value = (TokenType.ARGUMENT, (_value, None))
-					print(F'{Fore.BLUE}Got `INTERNAL_ARGUMENTSTRCHECKSUM` token with the value "{value[0]}"')
 				elif kind == 'INTERNAL_ARGUMENTHEXCHECKSUM':
 					_value = strip_hash_string_stuff(strip_argument_string_stuff(value))
 					kind, value = (TokenType.ARGUMENT, (None, int(_value, 0)))
-					print(F'{Fore.BLUE}Got `INTERNAL_ARGUMENTHEXCHECKSUM` token with the value {value[1]:#010x}')
 
 				elif kind == 'ARGUMENT':
 					kind, value = (TokenType.ARGUMENT, (value, None))
@@ -515,6 +513,7 @@ class QTokenIterator:
 # -------------------------------------------------------------------------------------------------
 class QB:
 
+	stream = None
 	data = [] # compiled bytes
 	debug = [] # debug table
 	defines = [] # defined flags
@@ -523,12 +522,13 @@ class QB:
 
 	# ---------------------------------------------------------------------------------------------
 	def __init__(self):
-		pass
+		self.stream = io.BytesIO()
 
 	# ---------------------------------------------------------------------------------------------
 	@classmethod
-	def from_file(cls, filename, params):
+	def from_file(cls, filename, params, defines):
 		qb = cls() # oaky
+		qb.defines.extend(defines)
 		pathname = Path(filename).resolve()
 		extension = pathname.suffix.lower().strip('.')
 
@@ -548,8 +548,9 @@ class QB:
 
 	# ---------------------------------------------------------------------------------------------
 	@classmethod
-	def from_string(cls, string, params):
+	def from_string(cls, string, params, defines):
 		qb = cls() # oaky
+		qb.defines.extend(defines)
 		try:
 			source = StringLineIterator(string)
 			qb.compile(source)
@@ -562,8 +563,6 @@ class QB:
 
 	# ---------------------------------------------------------------------------------------------
 	def compile(self, source, debug=True):
-		print('')
-		print('---- tokens --------------------')
 
 		# -----------------------------------------------------------------------------------------
 		def get_next_token(tokens):
@@ -576,10 +575,19 @@ class QB:
 		token_type_eol = TokenType.ENDOFLINENUMBER if debug else TokenType.ENDOFLINE
 
 		# -----------------------------------------------------------------------------------------
+		if debug:
+			print('')
+			print('---- compiler defines ----------')
+			print(self.defines)
+
+		# -----------------------------------------------------------------------------------------
 		parsing_script = False
 		current_script_name = None
 		current_token = None
-		iterator = iter(QTokenIterator(source))
+
+		# -----------------------------------------------------------------------------------------
+		writer = BinaryWriter(self.stream)
+		iterator = iter(QTokenIterator(source, self.defines))
 
 		# -----------------------------------------------------------------------------------------
 		while (current_token := get_next_token(iterator)) is not None:
@@ -587,11 +595,11 @@ class QB:
 			current_line = current_token['index']
 
 			if current_token_type is TokenType.ENDOFLINE:
-				self.data.append(token_type_eol)
+				writer.write_uint8(token_type_eol.value)
 				if debug:
-					self.data.append(current_token['value'])
+					writer.write_uint32(current_token['value'])
 
-			if current_token_type is TokenType.KEYWORD_SCRIPT:
+			elif current_token_type is TokenType.KEYWORD_SCRIPT:
 				if parsing_script:
 					raise InvalidFormatError(F"Unexpected `script` keyword while already inside a script at line {current_line}...")
 
@@ -604,9 +612,9 @@ class QB:
 				current_script_name = next_token['value']
 				self.tokens.append(current_token)
 				self.tokens.append(next_token)
-				self.data.append(TokenType.KEYWORD_SCRIPT)
-				self.data.append(TokenType.NAME)
-				self.data.append(resolve_checksum_tuple(next_token['value']))
+				writer.write_uint8(TokenType.KEYWORD_SCRIPT.value)
+				writer.write_uint8(TokenType.NAME.value)
+				writer.write_uint32(resolve_checksum_tuple(next_token['value']))
 				continue
 
 			elif current_token_type is TokenType.KEYWORD_ENDSCRIPT:
@@ -614,19 +622,49 @@ class QB:
 					raise InvalidFormatError(F"Unexpected `endscript` keyword without matching script at line {current_line}...")
 				parsing_script = False
 				current_script_name = None
-				self.data.append(TokenType.KEYWORD_ENDSCRIPT)
+				writer.write_uint8(TokenType.KEYWORD_ENDSCRIPT.value)
+
+			elif current_token_type is TokenType.KEYWORD_WHILE:
+				writer.write_uint8(TokenType.KEYWORD_WHILE.value)
+
+			elif current_token_type is TokenType.KEYWORD_REPEAT:
+				writer.write_uint8(TokenType.KEYWORD_REPEAT.value)
+
+			elif current_token_type is TokenType.ARGUMENT:
+				writer.write_uint8(TokenType.ARGUMENT.value)
+				writer.write_uint8(TokenType.NAME.value)
+				writer.write_uint32(resolve_checksum_tuple(current_token['value']))
+
+			elif current_token_type is TokenType.ALLARGS:
+				writer.write_uint8(TokenType.ALLARGS.value)
 
 			elif current_token_type is TokenType.NAME:
-				self.data.append(TokenType.NAME)
-				self.data.append(resolve_checksum_tuple(current_token['value']))
+				writer.write_uint8(TokenType.NAME.value)
+				writer.write_uint32(resolve_checksum_tuple(current_token['value']))
+
+			elif current_token_type is TokenType.INTEGER:
+				writer.write_uint8(TokenType.INTEGER.value)
+				writer.write_int32(current_token['value'])
+
+			elif current_token_type is TokenType.FLOAT:
+				writer.write_uint8(TokenType.FLOAT.value)
+				writer.write_float(current_token['value'])
 
 			elif current_token_type is TokenType.PAIR:
-				self.data.append(TokenType.PAIR)
-				self.data.append(current_token['value'])
+				writer.write_uint8(TokenType.PAIR.value)
+				writer.write_float(current_token['value'][0])
+				writer.write_float(current_token['value'][1])
+
+			elif current_token_type is TokenType.VECTOR:
+				writer.write_uint8(TokenType.VECTOR.value)
+				writer.write_float(current_token['value'][0])
+				writer.write_float(current_token['value'][1])
+				writer.write_float(current_token['value'][2])
 
 			elif current_token_type is TokenType.KEYWORD_RANDOMRANGE or current_token_type is TokenType.KEYWORD_RANDOMRANGE2:
 				if not parsing_script:
-					raise InvalidFormatError(F"`RandomRange` keyword can only be used inside scripts {current_line}...")
+					print(highlight_error_with_indicator(current_token['source'], current_token['index'], current_token['start'], current_token['end']))
+					raise InvalidFormatError(F"`RandomRange` keyword can only be used inside scripts...")
 
 				next_token = get_next_token(iterator)
 				if next_token['type'] is not TokenType.PAIR:
@@ -635,13 +673,25 @@ class QB:
 
 				self.tokens.append(current_token)
 				self.tokens.append(next_token)
-				self.data.append(current_token_type)
-				self.data.append(TokenType.PAIR)
-				self.data.append(next_token['value'])
+				writer.write_uint8(current_token_type.value)
+				writer.write_uint8(TokenType.PAIR.value)
+				writer.write_float(next_token['value'][0])
+				writer.write_float(next_token['value'][1])
 				continue
+	
+			elif current_token_type in (
+				TokenType.KEYWORD_RANDOM,
+				TokenType.KEYWORD_RANDOM2,
+				TokenType.KEYWORD_RANDOMNOREPEAT,
+				TokenType.KEYWORD_RANDOMPERMUTE,
+			):
+				print(highlight_error_with_indicator(current_token['source'], current_token['index'], current_token['start'], current_token['end']))
+				raise NotImplementedError(F"Random keyword `{current_token_type}` is not supported yet...")
 
-			elif current_token_type is TokenType.KEYWORD_RANDOMNOREPEAT:
-				print(F"{Fore.BLUE}Got `RandomNoRepeat` keyword and expect the next token to be a `OPENPARENTH`!")
+			else:
+				# @note: dump all the remaining one-byte tokens here...
+				# assuming that they don't require any extra housekeeping
+				writer.write_uint8(current_token_type.value)
 
 			self.tokens.append(current_token)
 
@@ -654,9 +704,17 @@ class QB:
 		#self.data.append(TokenType.ENDOFFILE)
 
 		# ---- debugging --------------------------------------------------------------------------
+		print('')
+		print('---- tokens --------------------')
 		for token in self.tokens:
 			print(token)
 
 	# ---------------------------------------------------------------------------------------------
 	def to_file(self, filename, params):
-		return False
+		pathname = Path(filename).resolve()
+		if not self.stream:
+			raise ValueError('The byte stream has no data!')
+		print(self.stream.getvalue().hex())
+		with open(pathname, 'wb') as out:
+			out.write(self.stream.getvalue())
+		return True

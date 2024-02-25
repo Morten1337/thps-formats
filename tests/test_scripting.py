@@ -1,13 +1,46 @@
 from thps_formats.scripting2 import QB, TokenType
 
+defines = ['DEVELOPER', 'TEST']
+
 
 def test_qb():
-	qb = QB.from_file('./tests/data/Example.q', 'THUGPRO')
+	qb = QB.from_file('./tests/data/Example.q', 'THUGPRO', defines)
 	assert qb is not None
-	#assert qb.to_file('./tests/data/Example.qb', 'THUGPRO')
+	assert qb.to_file('./tests/data/Example.qb', 'THUGPRO')
 	# @todo: round-trip test
 	# @todo: unit test individual
 
+
+# def test_dumping():
+# 	qb = QB.from_string("""
+# 	script WaitWhilstChecking
+# 		GetStartTime
+# 		while
+# 			DoNextTrick
+# 			if GotParam AndManuals
+# 				DoNextManualTrick
+# 			endif
+# 			Wait 1 GameFrame
+# 			GetElapsedTime StartTime = <StartTime>
+# 			if (<ElapsedTime> > <Duration>)
+# 				break
+# 			endif
+# 		repeat
+# 	endscript
+# 	""", 'THUGPRO')
+# 	assert qb is not None
+# 	assert qb.to_file('./tests/data/Example.qb', 'THUGPRO')
+
+#def test_dumping2():
+#	qb = QB.from_string("""
+#	script WaitWhilstChecking
+#		What = Hello
+#		Something = <#"0x00000000">
+#		<#"0xf625ce04"> = <#"Hello">
+#	endscript
+#	""", 'THUGPRO')
+#	assert qb is not None
+#	assert qb.to_file('./tests/data/Example.qb', 'THUGPRO')
 
 #def test_hash_strings():
 #	qb = QB.from_string("""
@@ -32,22 +65,22 @@ def test_qb():
 #	assert qb.tokens[10]['type'] == TokenType.ARGUMENT
 #	assert qb.tokens[11]['type'] == TokenType.KEYWORD_ENDSCRIPT
 
-# def test_random_range():
-# 	qb = QB.from_string("""
-# 	script HandleKickBoardSound
-# 		Obj_PlaySound SK6_BoardGrab01 vol = 200 pitch = 80
-# 		RandomNoRepeat(
-# 			@Obj_PlaySound BailBodyPunch01_11 pitch = RandomRange(80.0,102.0) vol = RandomRange(50.0,60.0)
-# 			@Obj_PlaySound BailBodyPunch02_11 pitch = RandomRange(80.0,102.0) vol = RandomRange(50.0,60.0)
-# 			@Obj_PlaySound BailBodyPunch03_11 pitch = RandomRange(80.0,102.0) vol = RandomRange(50.0,60.0)
-# 			@Obj_PlaySound BailBodyPunch04_11 pitch = RandomRange(80.0,102.0) vol = RandomRange(50.0,60.0)
-# 			@Obj_PlaySound BailBodyPunch05_11 pitch = RandomRange(80.0,102.0) vol = RandomRange(50.0,60.0)
-# 		)
-# 		Obj_PlaySound SK6_BoardSplit01 pitch = 180 vol = 15
-# 	endscript
-# 	""", 'THUGPRO')
-# 	assert qb is not None
-# 	print(qb.data)
+#def test_random_range():
+#	qb = QB.from_string("""
+#	script HandleKickBoardSound
+#		Obj_PlaySound SK6_BoardGrab01 vol = 200 pitch = 80
+#		RandomNoRepeat(
+#			@Obj_PlaySound BailBodyPunch01_11 pitch = RandomRange(80.0,102.0) vol = RandomRange(50.0,60.0)
+#			@Obj_PlaySound BailBodyPunch02_11 pitch = RandomRange(80.0,102.0) vol = RandomRange(50.0,60.0)
+#			@Obj_PlaySound BailBodyPunch03_11 pitch = RandomRange(80.0,102.0) vol = RandomRange(50.0,60.0)
+#			@Obj_PlaySound BailBodyPunch04_11 pitch = RandomRange(80.0,102.0) vol = RandomRange(50.0,60.0)
+#			@Obj_PlaySound BailBodyPunch05_11 pitch = RandomRange(80.0,102.0) vol = RandomRange(50.0,60.0)
+#		)
+#		Obj_PlaySound SK6_BoardSplit01 pitch = 180 vol = 15
+#	endscript
+#	""", 'THUGPRO')
+#	assert qb is not None
+#	assert qb.to_file('./tests/data/Example.qb', 'THUGPRO')
 
 # def test_random_no_repeat():
 # 	qb = QB.from_string("""
