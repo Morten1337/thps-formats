@@ -6,24 +6,23 @@ from colorama import Fore, Style
 from pathlib import Path as Path
 
 from . enums import TokenType
-
 from . crc32 import crc32_generate
-
 
 # @warn: probably shouldnt have this here...
 colorama.init(autoreset=True)
 
 # --- todo ----------------------------------------------------------------------------------------
-# - EOL and EOF tokens 
-# - handle checksum/name type representation
-# - generate qb keys
+# - EOL and EOF tokens
+# - tokenizer->lexer->compiler
 # - token post-processing
-# 	- Script, Arrays, Structs, Parenths - scopes
+# 	- Script, Arrays, Structs, Parentheses - scopes
 # 	- Random, RandomRange
 # 	- Jumps, Ifs
-# - generate bytes
+# - actually generate bytes
 # - #include directive
 # - #raw bytes
+# - fix incorrect line numbers
+# - improve error message handling
 
 
 # -------------------------------------------------------------------------------------------------
