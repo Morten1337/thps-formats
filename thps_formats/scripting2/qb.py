@@ -7,6 +7,7 @@ from colorama import Fore, Style
 from pathlib import Path as Path
 
 from thps_formats.utils.writer import BinaryWriter
+from thps_formats.shared.enums import GameType, GameVersion, PlatformType
 from . enums import TokenType
 from . crc32 import crc32_generate
 
@@ -213,7 +214,7 @@ class QTokenIterator:
 		}
 
 		self.token_operator_lookup_table = {
-			'EQUALS': (TokenType.ASSIGN, None),
+			'EQUALS': (TokenType.EQUALS, None),
 			'ASSIGN': (TokenType.ASSIGN, None),
 			'DOT': (TokenType.DOT, None),
 			'COMMA': (TokenType.COMMA, None),
@@ -256,8 +257,8 @@ class QTokenIterator:
 			'RANDOMPERMUTE': (TokenType.KEYWORD_RANDOMNOREPEAT, None),
 			'RANDOMSHUFFLE': (TokenType.KEYWORD_RANDOMPERMUTE, None),
 			'NOT': (TokenType.KEYWORD_NOT, None),
-			'AND': (TokenType.OPERATOR_AND, None),
-			'OR': (TokenType.OPERATOR_OR, None),
+			'AND': (TokenType.KEYWORD_AND, None),
+			'OR': (TokenType.KEYWORD_OR, None),
 			'SWITCH': (TokenType.KEYWORD_SWITCH, None),
 			'ENDSWITCH': (TokenType.KEYWORD_ENDSWITCH, None),
 			'CASE': (TokenType.KEYWORD_CASE, None),
@@ -386,7 +387,6 @@ class QTokenIterator:
 
 				elif kind == 'FLOAT':
 					kind, value = (TokenType.FLOAT, float(value))
-
 				elif kind == 'INTEGER':
 					kind, value = (TokenType.INTEGER, int(value))
 				elif kind == 'HEXINTEGER':
@@ -453,10 +453,8 @@ class QTokenIterator:
 
 				elif kind == 'INTERNAL_GOTO':
 					kind, value = (TokenType.INTERNAL_GOTO, value.split(' ')[1])
-					print(F'Parsing #goto with name `{value}`')
 				elif kind == 'INTERNAL_LABEL':
 					kind, value = (TokenType.INTERNAL_LABEL, value.split(':')[0])
-					print(F'Parsing label with name `{value}`')
 
 				elif kind == 'INTERNAL_STRCHECKSUM':
 					_value = strip_hash_string_stuff(value)
@@ -513,12 +511,21 @@ class QTokenIterator:
 # -------------------------------------------------------------------------------------------------
 class QB:
 
+	# output byte stream
 	stream = None
-	data = [] # compiled bytes
-	debug = [] # debug table
-	defines = [] # defined flags
-	items = [] # qb items
-	tokens = [] # lexer items
+	# checksum debug table
+	checksums = []
+	# defined flags
+	defines = []
+	# q tokens
+	tokens = []
+
+	# @todo: Probably need to change this as we want different input and output parameters?
+	# Right now the compiler will generate the bytes based on the input parameters anyways,
+	# and the `to_file` method just dumps the bytes that have generated already...
+	params = {
+		'game': GameVersion.NONE,
+	}
 
 	# ---------------------------------------------------------------------------------------------
 	def __init__(self):
@@ -529,6 +536,7 @@ class QB:
 	def from_file(cls, filename, params, defines):
 		qb = cls() # oaky
 		qb.defines.extend(defines)
+		qb.params.update(params)
 		pathname = Path(filename).resolve()
 		extension = pathname.suffix.lower().strip('.')
 
@@ -543,7 +551,6 @@ class QB:
 				qb.compile(source)
 			except Exception as exeption:
 				print(exeption)
-				qb.data = None
 		return qb
 
 	# ---------------------------------------------------------------------------------------------
@@ -551,15 +558,21 @@ class QB:
 	def from_string(cls, string, params, defines):
 		qb = cls() # oaky
 		qb.defines.extend(defines)
+		qb.params.update(params)
 		try:
 			source = StringLineIterator(string)
 			qb.compile(source)
 		except Exception as exeption:
 			print(exeption)
-			qb.data = None
-			return qb
-
 		return qb
+
+	# ---------------------------------------------------------------------------------------------
+	def get_game_type(self):
+		return self.params.get('game', GameVersion.NONE).value[0]
+
+	# ---------------------------------------------------------------------------------------------
+	def get_game_platform(self):
+		return self.params.get('game', GameVersion.NONE).value[1]
 
 	# ---------------------------------------------------------------------------------------------
 	def compile(self, source, debug=True):
@@ -588,6 +601,11 @@ class QB:
 		# -----------------------------------------------------------------------------------------
 		writer = BinaryWriter(self.stream)
 		iterator = iter(QTokenIterator(source, self.defines))
+
+		# @todo: Instead of iterating over the tokens and writing bytes to the stream,
+		# the tokens should probably be dumped directly from the tokenizer into `self.tokens`
+		# And the byte stream writing part should be a separate step. The user might want to
+		# process the tokens before compiling or they might want to output multiple formats?
 
 		# -----------------------------------------------------------------------------------------
 		while (current_token := get_next_token(iterator)) is not None:
@@ -626,6 +644,20 @@ class QB:
 
 			elif current_token_type is TokenType.KEYWORD_WHILE:
 				writer.write_uint8(TokenType.KEYWORD_WHILE.value)
+
+			elif current_token_type in (TokenType.OPERATOR_SHIFTRIGHT, TokenType.OPERATOR_SHIFTLEFT):
+				if self.get_game_type() > GameType.THUG1:
+					print(highlight_error_with_indicator(current_token['source'], current_token['index'], current_token['start'], current_token['end']))
+					raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
+				writer.write_uint8(current_token_type.value)
+
+			# these are not supported... fallback to alternative tokens
+			elif current_token_type is TokenType.KEYWORD_AND:
+				writer.write_uint8(TokenType.OPERATOR_AND.value)
+			elif current_token_type is TokenType.KEYWORD_OR:
+				writer.write_uint8(TokenType.OPERATOR_OR.value)
+			elif current_token_type is TokenType.EQUALS:
+				writer.write_uint8(TokenType.ASSIGN.value)
 
 			elif current_token_type is TokenType.KEYWORD_REPEAT:
 				writer.write_uint8(TokenType.KEYWORD_REPEAT.value)
@@ -701,7 +733,6 @@ class QB:
 		#	'value': None,
 		#	'index': current_line
 		#})
-		#self.data.append(TokenType.ENDOFFILE)
 
 		# ---- debugging --------------------------------------------------------------------------
 		print('')

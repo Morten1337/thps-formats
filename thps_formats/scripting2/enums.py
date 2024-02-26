@@ -1,11 +1,8 @@
-from enum import Enum, IntEnum
+from enum import Enum
 
 
 # -------------------------------------------------------------------------------------------------
 class TokenType(Enum):
-
-	def __int__(self):
-		return self.value
 
 	# Misc
 	ENDOFFILE = 0x00
@@ -98,8 +95,8 @@ class TokenType(Enum):
 	KEYWORD_RANDOMRANGE2 = 0x38
 
 	KEYWORD_NOT = 0x39
-	#KEYWORD_AND = 0x3A
-	#KEYWORD_OR = 0x3B
+	KEYWORD_AND = 0x3A
+	KEYWORD_OR = 0x3B
 	KEYWORD_SWITCH = 0x3C
 	KEYWORD_ENDSWITCH = 0x3D
 	KEYWORD_CASE = 0x3E
@@ -122,3 +119,6 @@ class TokenType(Enum):
 	INTERNAL_INCLUDE = 0x5F
 	INTERNAL_RAW = 0x60
 
+	# ---------------------------------------------------------------------------------------------
+	def __int__(self):
+		return self.value

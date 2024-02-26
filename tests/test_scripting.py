@@ -1,12 +1,13 @@
 from thps_formats.scripting2 import QB, TokenType
+from thps_formats.shared.enums import GameType, GameVersion, PlatformType
 
 defines = ['DEVELOPER', 'TEST']
 
 
 def test_qb():
-	qb = QB.from_file('./tests/data/Example.q', 'THUGPRO', defines)
+	qb = QB.from_file('./tests/data/Example.q', {'game': GameVersion.THUGPRO_WIN}, defines)
 	assert qb is not None
-	assert qb.to_file('./tests/data/Example.qb', 'THUGPRO')
+	assert qb.to_file('./tests/data/Example.qb', {'game': GameVersion.THUGPRO_WIN})
 	# @todo: round-trip test
 	# @todo: unit test individual
 
@@ -27,9 +28,9 @@ def test_qb():
 # 			endif
 # 		repeat
 # 	endscript
-# 	""", 'THUGPRO')
+# 	""", {'game': GameVersion.THUGPRO_WIN})
 # 	assert qb is not None
-# 	assert qb.to_file('./tests/data/Example.qb', 'THUGPRO')
+# 	assert qb.to_file('./tests/data/Example.qb', {'game': GameVersion.THUGPRO_WIN})
 
 #def test_dumping2():
 #	qb = QB.from_string("""
@@ -38,9 +39,9 @@ def test_qb():
 #		Something = <#"0x00000000">
 #		<#"0xf625ce04"> = <#"Hello">
 #	endscript
-#	""", 'THUGPRO')
+#	""", {'game': GameVersion.THUGPRO_WIN})
 #	assert qb is not None
-#	assert qb.to_file('./tests/data/Example.qb', 'THUGPRO')
+#	assert qb.to_file('./tests/data/Example.qb', {'game': GameVersion.THUGPRO_WIN})
 
 #def test_hash_strings():
 #	qb = QB.from_string("""
@@ -49,7 +50,7 @@ def test_qb():
 #		#"some thing" = <#"some value">
 #		#"some thing" = <#"0xcc489b50">
 #	endscript
-#	""", 'THUGPRO')
+#	""", {'game': GameVersion.THUGPRO_WIN})
 #	assert qb is not None
 #	print(qb.data)
 #	assert qb.tokens[0]['type'] == TokenType.KEYWORD_SCRIPT
@@ -78,9 +79,9 @@ def test_qb():
 #		)
 #		Obj_PlaySound SK6_BoardSplit01 pitch = 180 vol = 15
 #	endscript
-#	""", 'THUGPRO')
+#	""", {'game': GameVersion.THUGPRO_WIN})
 #	assert qb is not None
-#	assert qb.to_file('./tests/data/Example.qb', 'THUGPRO')
+#	assert qb.to_file('./tests/data/Example.qb', {'game': GameVersion.THUGPRO_WIN})
 
 # def test_random_no_repeat():
 # 	qb = QB.from_string("""
@@ -91,7 +92,7 @@ def test_qb():
 # 		@Obj_PlaySound BailBodyPunch04_11 pitch = (80.0,102.0) vol = (100.0,120.0)
 # 		@Obj_PlaySound BailBodyPunch05_11 pitch = (80.0,102.0) vol = (100.0,120.0)
 # 	)
-# 	""", 'THUGPRO')
+# 	""", {'game': GameVersion.THUGPRO_WIN})
 # 	assert qb is not None
 
 # 	qb = QB.from_string("""
@@ -103,10 +104,10 @@ def test_qb():
 # 		@*4 Obj_PlaySound RU_BellHit01 vol = 60 pitch = 75 emitter = TRG_SFX_SOB_BigBellsRing01
 # 		@*2 Obj_PlaySound RU_BellHit01 vol = 25 pitch = 200 emitter = TRG_SFX_SOB_BigBellsRing01
 # 	)
-# 	""", 'THUGPRO')
+# 	""", {'game': GameVersion.THUGPRO_WIN})
 # 	assert qb is not None
 
-# 	qb = QB.from_string('wait RandomNoRepeat(@0.1 @0.14 @0.2 @0.25 @0.28 @0.34) seconds', 'THUGPRO')
+# 	qb = QB.from_string('wait RandomNoRepeat(@0.1 @0.14 @0.2 @0.25 @0.28 @0.34) seconds', {'game': GameVersion.THUGPRO_WIN})
 # 	assert qb is not None
 
 #def test_qb2():
@@ -119,7 +120,7 @@ def test_qb():
 #		'	GlobalInteger = 1234 // inline comment',
 #		'	GlobalFloat = 3.14159298',
 #	]	
-#	qb = QB.from_string(source, 'THUGPRO')
+#	qb = QB.from_string(source, {'game': GameVersion.THUGPRO_WIN})
 #	assert qb is not None
 #	assert qb.tokens[0] == 'IDENTIFIER'
 #	assert qb.tokens[1] == 'ASSIGN'
