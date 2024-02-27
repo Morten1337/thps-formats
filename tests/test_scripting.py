@@ -1,57 +1,129 @@
+import pytest
+
 from thps_formats.scripting2 import QB, TokenType
 from thps_formats.shared.enums import GameType, GameVersion, PlatformType
 
 defines = ['DEVELOPER', 'TEST']
+params = {
+	'debug': True,
+	'game': GameVersion.THUGPRO_WIN
+}
 
 
-#def test_qb():
-#	qb = QB.from_file('./tests/data/Example.q', {'game': GameVersion.THUGPRO_WIN}, defines)
-#	assert qb is not None
-#	assert qb.to_file('./tests/data/Example.qb', {'game': GameVersion.THUGPRO_WIN})
-#	# @todo: round-trip test
-#	# @todo: unit test individual
-
-
-def test_strings():
-	qb = QB.from_string("""
-	{
-		desc_id = Fly
-		frontend_desc = 'Fly'
-		mesh = "models/skater_male/specs_fly.skin"
-	}
-	""", {'game': GameVersion.THUGPRO_WIN})
+def test_qb():
+	qb = QB.from_file('./tests/data/Example.q', params, defines)
 	assert qb is not None
-	assert qb.to_console()
-	assert qb.to_file('./tests/data/test.qb', {'game': GameVersion.THUGPRO_WIN})
+	assert qb.to_file('./tests/data/Example.qb', params)
 
 
-def test_brackets():
-	qb = QB.from_string("""
-	glasses = [
-		{
-			desc_id = None
-			frontend_desc = 'None'
-			no_color
-		}
-		{
-			desc_id = #"Burnquist Glasses"
-			frontend_desc = 'Burnquist Style'
-			mesh = "models/skater_male/specs_burnquist.skin"
-		}
-		{
-			desc_id = SkiGoggles
-			frontend_desc = 'Ski Goggles'
-			mesh = "models/skater_male/specs_skigoggles.skin"
-		}
-		{
-			desc_id = Specs_Nigel_Costume
-			frontend_desc = 'Nigel Mask'
-			mesh = "models/skater_male/Specs_Nigel_Costume.skin"
-		}
-	]
-	""", {'game': GameVersion.THUGPRO_WIN})
-	assert qb is not None
-	assert qb.to_console()
+# def test_scripts():
+# 	with pytest.raises(Exception):
+# 		QB.from_string("""
+# 		script "garbage"
+# 			// should fail because string name
+# 		endscript
+# 		""")
+
+
+# def test_scripts2():
+# 	with pytest.raises(Exception):
+# 		QB.from_string("""
+# 		script ReturnTest
+# 			// fails because return needs to be first on its line
+# 			Something return { Result = 1 }
+# 		endscript
+# 		""")
+
+
+# def test_scripts3():
+# 	with pytest.raises(Exception):
+# 		QB.from_string("""
+# 			// fails because return needs to be in a script
+# 			return { Result = 1 }
+# 		""")
+
+
+# def test_scripts4():
+# 	with pytest.raises(Exception):
+# 		QB.from_string("""
+# 			// fails because while needs to be in a script
+# 			while
+# 		""")
+
+
+# def test_scripts5():
+# 	with pytest.raises(Exception):
+# 		QB.from_string("""
+# 			// fails because repeat needs to be in a script
+# 			repeat
+# 		""")
+
+
+# def test_scripts6():
+# 	with pytest.raises(Exception):
+# 		QB.from_string("""
+# 			// fails because break needs to be in a script
+# 			break
+# 		""")
+
+
+# def test_script_loops():
+# 	with pytest.raises(Exception):
+# 		QB.from_string("""
+# 			script LoopTest
+# 				while
+# 					printf "foo"
+# 				repeat 5
+# 				break
+# 			endscript
+# 		""")
+
+# 		QB.from_string("""
+# 			script LoopTest
+# 			endscript
+# 		""")
+
+
+# def test_strings():
+# 	qb = QB.from_string("""
+# 	{
+# 		desc_id = Fly
+# 		frontend_desc = 'Fly'
+# 		mesh = "models/skater_male/specs_fly.skin"
+# 	}
+# 	""", params)
+# 	assert qb is not None
+# 	assert qb.to_console()
+# 	assert qb.to_file('./tests/data/test.qb', params)
+
+
+# def test_brackets():
+# 	qb = QB.from_string("""
+# 	glasses = [
+# 		{
+# 			desc_id = None
+# 			frontend_desc = 'None'
+# 			no_color
+# 		}
+# 		{
+# 			desc_id = #"Burnquist Glasses"
+# 			frontend_desc = 'Burnquist Style'
+# 			mesh = "models/skater_male/specs_burnquist.skin"
+# 		}
+# 		{
+# 			desc_id = SkiGoggles
+# 			frontend_desc = 'Ski Goggles'
+# 			mesh = "models/skater_male/specs_skigoggles.skin"
+# 		}
+# 		{
+# 			desc_id = Specs_Nigel_Costume
+# 			frontend_desc = 'Nigel Mask'
+# 			mesh = "models/skater_male/Specs_Nigel_Costume.skin"
+# 		}
+# 	]
+# 	""", params)
+# 	assert qb is not None
+# 	assert qb.to_console()
 
 # def test_dumping():
 # 	qb = QB.from_string("""
@@ -69,9 +141,9 @@ def test_brackets():
 # 			endif
 # 		repeat
 # 	endscript
-# 	""", {'game': GameVersion.THUGPRO_WIN})
+# 	""", params)
 # 	assert qb is not None
-# 	assert qb.to_file('./tests/data/Example.qb', {'game': GameVersion.THUGPRO_WIN})
+# 	assert qb.to_file('./tests/data/Example.qb', params)
 
 #def test_dumping2():
 #	qb = QB.from_string("""
@@ -80,9 +152,9 @@ def test_brackets():
 #		Something = <#"0x00000000">
 #		<#"0xf625ce04"> = <#"Hello">
 #	endscript
-#	""", {'game': GameVersion.THUGPRO_WIN})
+#	""", params)
 #	assert qb is not None
-#	assert qb.to_file('./tests/data/Example.qb', {'game': GameVersion.THUGPRO_WIN})
+#	assert qb.to_file('./tests/data/Example.qb', params)
 
 #def test_hash_strings():
 #	qb = QB.from_string("""
@@ -91,7 +163,7 @@ def test_brackets():
 #		#"some thing" = <#"some value">
 #		#"some thing" = <#"0xcc489b50">
 #	endscript
-#	""", {'game': GameVersion.THUGPRO_WIN})
+#	""", params)
 #	assert qb is not None
 #	print(qb.data)
 #	assert qb.tokens[0]['type'] == TokenType.KEYWORD_SCRIPT
@@ -120,9 +192,9 @@ def test_brackets():
 #		)
 #		Obj_PlaySound SK6_BoardSplit01 pitch = 180 vol = 15
 #	endscript
-#	""", {'game': GameVersion.THUGPRO_WIN})
+#	""", params)
 #	assert qb is not None
-#	assert qb.to_file('./tests/data/Example.qb', {'game': GameVersion.THUGPRO_WIN})
+#	assert qb.to_file('./tests/data/Example.qb', params)
 
 # def test_random_no_repeat():
 # 	qb = QB.from_string("""
@@ -133,7 +205,7 @@ def test_brackets():
 # 		@Obj_PlaySound BailBodyPunch04_11 pitch = (80.0,102.0) vol = (100.0,120.0)
 # 		@Obj_PlaySound BailBodyPunch05_11 pitch = (80.0,102.0) vol = (100.0,120.0)
 # 	)
-# 	""", {'game': GameVersion.THUGPRO_WIN})
+# 	""", params)
 # 	assert qb is not None
 
 # 	qb = QB.from_string("""
@@ -145,10 +217,10 @@ def test_brackets():
 # 		@*4 Obj_PlaySound RU_BellHit01 vol = 60 pitch = 75 emitter = TRG_SFX_SOB_BigBellsRing01
 # 		@*2 Obj_PlaySound RU_BellHit01 vol = 25 pitch = 200 emitter = TRG_SFX_SOB_BigBellsRing01
 # 	)
-# 	""", {'game': GameVersion.THUGPRO_WIN})
+# 	""", params)
 # 	assert qb is not None
 
-# 	qb = QB.from_string('wait RandomNoRepeat(@0.1 @0.14 @0.2 @0.25 @0.28 @0.34) seconds', {'game': GameVersion.THUGPRO_WIN})
+# 	qb = QB.from_string('wait RandomNoRepeat(@0.1 @0.14 @0.2 @0.25 @0.28 @0.34) seconds', params)
 # 	assert qb is not None
 
 #def test_qb2():
@@ -161,7 +233,7 @@ def test_brackets():
 #		'	GlobalInteger = 1234 // inline comment',
 #		'	GlobalFloat = 3.14159298',
 #	]	
-#	qb = QB.from_string(source, {'game': GameVersion.THUGPRO_WIN})
+#	qb = QB.from_string(source, params)
 #	assert qb is not None
 #	assert qb.tokens[0] == 'IDENTIFIER'
 #	assert qb.tokens[1] == 'ASSIGN'

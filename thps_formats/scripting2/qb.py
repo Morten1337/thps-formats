@@ -135,6 +135,19 @@ def strip_argument_string_stuff(value):
 
 
 # -------------------------------------------------------------------------------------------------
+def resolve_checksum_name_tuple(value):
+
+	if value[0] is not None:
+		return value[0]
+
+	if value[1] is not None and isinstance(value[1], int):
+		# @todo: lookup name from table 
+		return F"{value[1]:#010x}"
+
+	raise ValueError('Trying to resolve checksum name, but no name or checksum was passed...')
+
+
+# -------------------------------------------------------------------------------------------------
 def resolve_checksum_tuple(value):
 
 	# ('Name', 0xA1DC81F9)
@@ -428,7 +441,6 @@ class QTokenIterator:
 					if keyword in self.token_keyword_lookup_table.keys():
 						kind, value = self.token_keyword_lookup_table.get(keyword)
 					else:
-						print(f'Assuming the identifier "{value}" is a `TokenType.NAME`')
 						kind, value = (TokenType.NAME, (value, None))
 
 				elif kind == 'INTERNAL_INCLUDE':
@@ -563,10 +575,12 @@ class QB:
 			raise NotImplementedError('Loading QB scripts is not supported yet...')
 		elif extension == 'q':
 			try:
+				print('Compiling q script from file...')
 				source = LineIterator(pathname)
 				qb.compile(source)
 			except Exception as exeption:
 				print(exeption)
+				raise exeption
 		return qb
 
 	# ---------------------------------------------------------------------------------------------
@@ -574,10 +588,12 @@ class QB:
 	def from_string(cls, string, params={}, defines=[]):
 		qb = cls(params, defines) # oaky
 		try:
+			print('Compiling q script from string...')
 			source = StringLineIterator(string)
 			qb.compile(source)
 		except Exception as exeption:
 			print(exeption)
+			raise exeption
 		return qb
 
 	# ---------------------------------------------------------------------------------------------
@@ -592,51 +608,47 @@ class QB:
 	def compile(self, source):
 
 		# -----------------------------------------------------------------------------------------
-		def get_next_token(tokens):
-			try:
-				return next(tokens)
-			except StopIteration:
-				return None
-
-		# -----------------------------------------------------------------------------------------
+		# ìf are we debugging
 		debug = self.params['debug']
+		# shorthand for the end-of-line token to use in debug builds
 		token_type_eol = TokenType.ENDOFLINENUMBER if debug else TokenType.ENDOFLINE
 
 		# -----------------------------------------------------------------------------------------
+		# if we are currently parsing tokens inside a script
 		parsing_script = False
+		# the name/checksum of the current script...
 		current_script_name = None
-		current_token = None
-		parenth_count = 0
-		curly_count = 0
-		curly_tracker = [] # (ArrayCount, StructCount)
-		square_count = 0
-		square_tracker = [] # (ArrayCount, StructCount)
+		# for keeping track of open loops
 		loop_count = 0
+		# for keeping track of open parentheses
+		parenth_count = 0
+		# for keeping track of open structs/curly brackets
+		curly_count = 0
+		script_curly_count = 0
+		# stores tuples of square, curly bracket counts... used for housekeeping
+		curly_tracker = []
+		# for keeping track of open arrays/square brackets
+		square_count = 0
+		script_square_count = 0
+		# stores tuples of square, curly bracket counts... used for housekeeping
+		square_tracker = []
 
 		# -----------------------------------------------------------------------------------------
 		if debug:
-			print('')
-			print('---- compiler defines ----------')
+			print('\n---- compiler defines ----------')
 			print(self.defines)
 
 		# -----------------------------------------------------------------------------------------
 		writer = BinaryWriter(self.stream)
-		iterator = iter(QTokenIterator(source, self.defines))
-
-		# @todo: Instead of iterating over the tokens and writing bytes to the stream,
-		# the tokens should probably be dumped directly from the tokenizer into `self.tokens`
-		# And the byte stream writing part should be a separate step. The user might want to
-		# process the tokens before compiling or they might want to output multiple formats?
+		iterator = QTokenIterator(source, self.defines)
 
 		# -----------------------------------------------------------------------------------------
-		while (current_token := get_next_token(iterator)) is not None:
+		for token in iterator:
+			self.tokens.append(token)
+
+		# -----------------------------------------------------------------------------------------
+		for index, current_token in enumerate(self.tokens):
 			current_token_type = current_token['type']
-			current_line = current_token['index']
-
-			#if previous_token is not None:
-			#	if previous_token['type'] is token_type_eol:
-			#		print('Yes, the previous token was EOL')
-
 			if current_token_type is TokenType.ENDOFLINE:
 				writer.write_uint8(token_type_eol.value)
 				if debug:
@@ -646,26 +658,38 @@ class QB:
 			elif current_token_type is TokenType.KEYWORD_SCRIPT:
 				if parsing_script:
 					print_token_error_message(current_token)
-					raise InvalidFormatError(F"Unexpected `script` keyword while already inside a script at line {current_line}...")
-
-				next_token = get_next_token(iterator)
+					raise InvalidFormatError("Unexpected `script` keyword while already inside a script at line...")
+				next_token = self.tokens[index + 1]
 				if next_token['type'] is not TokenType.NAME:
 					print_token_error_message(next_token)
 					raise InvalidFormatError(F"Expected script name but found `{next_token['type']}`...")
 
 				parsing_script = True
 				current_script_name = next_token['value']
-				self.tokens.append(current_token)
-				self.tokens.append(next_token)
+				script_curly_count = curly_count
+				script_square_count = square_count
 				writer.write_uint8(TokenType.KEYWORD_SCRIPT.value)
-				writer.write_uint8(TokenType.NAME.value)
-				writer.write_uint32(resolve_checksum_tuple(next_token['value']))
 				continue
 
 			elif current_token_type is TokenType.KEYWORD_ENDSCRIPT:
 				if not parsing_script:
 					print_token_error_message(current_token)
 					raise InvalidFormatError("Unexpected `endscript` keyword without matching script at line...")
+				script_display_name = resolve_checksum_name_tuple(current_script_name)
+				if loop_count > 0:
+					print_token_error_message(current_token)
+					raise Exception(F"Missing `repeat` keyword in script `{script_display_name}`")
+				if parenth_count != 0:
+					print_token_error_message(current_token)
+					raise BracketMismatchError(F"Parentheses mismatch in script `{script_display_name}`")
+				if script_curly_count > 0:
+					if script_curly_count != curly_count:
+						raise BracketMismatchError(F"Curly bracket mismatch in script `{script_display_name}`")
+						script_curly_count = 0
+				if script_square_count > 0:
+					if script_square_count != square_count:
+						raise BracketMismatchError(F"Square bracket mismatch in script `{script_display_name}`")
+						script_square_count = 0
 				parsing_script = False
 				current_script_name = None
 				writer.write_uint8(TokenType.KEYWORD_ENDSCRIPT.value)
@@ -675,6 +699,10 @@ class QB:
 				if not parsing_script:
 					print_token_error_message(current_token)
 					raise ContextualSyntaxError("`while` keyword can only be used inside scripts...")
+				previous_token = self.tokens[index - 1]
+				if previous_token['type'] is not TokenType.ENDOFLINE:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`while` keyword must be the first word on its line...")
 				loop_count += 1
 				writer.write_uint8(TokenType.KEYWORD_WHILE.value)
 				continue
@@ -686,6 +714,10 @@ class QB:
 				if loop_count <= 0:
 					print_token_error_message(current_token)
 					raise ContextualSyntaxError("`repeat` keyword can only be used with while loops...")
+				previous_token = self.tokens[index - 1]
+				if previous_token['type'] is not TokenType.ENDOFLINE:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`repeat` keyword must be the first word on its line...")
 				loop_count -= 1
 				writer.write_uint8(TokenType.KEYWORD_REPEAT.value)
 				continue
@@ -697,6 +729,10 @@ class QB:
 				if loop_count <= 0:
 					print_token_error_message(current_token)
 					raise ContextualSyntaxError("`break` keyword can only be used inside while loops...")
+				previous_token = self.tokens[index - 1]
+				if previous_token['type'] is not TokenType.ENDOFLINE:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`break` keyword must be the first word on its line...")
 				writer.write_uint8(TokenType.KEYWORD_BREAK.value)
 				continue
 
@@ -704,6 +740,10 @@ class QB:
 				if not parsing_script:
 					print_token_error_message(current_token)
 					raise ContextualSyntaxError("`return` keyword can only be used inside scripts...")
+				previous_token = self.tokens[index - 1]
+				if previous_token['type'] is not TokenType.ENDOFLINE:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`return` keyword must be the first word on its line...")
 				writer.write_uint8(TokenType.KEYWORD_RETURN.value)
 				continue
 
@@ -827,18 +867,11 @@ class QB:
 				if not parsing_script:
 					print_token_error_message(current_token)
 					raise InvalidFormatError("`RandomRange` keyword can only be used inside scripts...")
-
-				next_token = get_next_token(iterator)
+				next_token = self.tokens[index + 1]
 				if next_token['type'] is not TokenType.PAIR:
 					print_token_error_message(next_token)
 					raise InvalidFormatError(F"Expected `{TokenType.PAIR}` token proceeding `{current_token_type}`, but found `{next_token['type']}`...")
-
-				self.tokens.append(current_token)
-				self.tokens.append(next_token)
 				writer.write_uint8(current_token_type.value)
-				writer.write_uint8(TokenType.PAIR.value)
-				writer.write_float(next_token['value'][0])
-				writer.write_float(next_token['value'][1])
 				continue
 	
 			elif current_token_type in (
@@ -857,20 +890,11 @@ class QB:
 				writer.write_uint8(current_token_type.value)
 				continue
 
-			self.tokens.append(current_token)
-
-		# @todo this should go after the debug table
-		#self.tokens.append({
-		#	'type': TokenType.ENDOFFILE,
-		#	'value': None,
-		#	'index': current_line
-		#})
-
 		# ---- debugging --------------------------------------------------------------------------
-		print('')
-		print('---- tokens --------------------')
-		for token in self.tokens:
-			print(token)
+		if debug:
+			print('---- tokens --------------------')
+			for token in self.tokens:
+				print(token)
 
 	# ---------------------------------------------------------------------------------------------
 	def to_file(self, filename, params):
