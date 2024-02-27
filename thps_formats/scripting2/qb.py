@@ -29,6 +29,7 @@ colorama.init(autoreset=True)
 
 # -------------------------------------------------------------------------------------------------
 def print_token_error_message(token):
+	print('Error:')
 	print(highlight_error_with_indicator(token['source'], token['index'], token['start'], token['end']))
 
 
@@ -57,7 +58,7 @@ def highlight_error_with_indicator(line, line_number, start_index, end_index):
 	# Uses spaces to align with the start of the error, then a dash line, ending with an arrow
 	indicator_line = ' ' * (6 + start_index) + Fore.RED + '^' * (end_index - start_index) + Style.RESET_ALL
 	
-	return f'Error:\n{line_with_number}\n{indicator_line}'
+	return f'{line_with_number}\n{indicator_line}'
 
 
 # -------------------------------------------------------------------------------------------------
@@ -156,12 +157,12 @@ def resolve_checksum_tuple(value):
 
 	if value[0] is not None:
 		checksum = crc32_generate(value[0])
-		print(F"Resolving checksum {checksum:#010x}")
+		#print(F"Resolving checksum {checksum:#010x}")
 		return checksum
 
 	if value[1] is not None and isinstance(value[1], int):
 		checksum = value[1]
-		print(F"Resolving checksum {checksum:#010x}")
+		#print(F"Resolving checksum {checksum:#010x}")
 		return checksum
 
 	raise ValueError('Trying to resolve checksum, but no name or checksum was passed...')
@@ -646,9 +647,15 @@ class QB:
 		for token in iterator:
 			self.tokens.append(token)
 
+		# @todo: Should handle the `#import` stuff here I guess?
+		# We can go through the current list of tokens and look for include tokens,
+		# and instantiate token iterators as needed, then consolidate them all in the end.
+		# There should also be a limit to how many levels we want to handle. Maybe one is enough?
+
 		# -----------------------------------------------------------------------------------------
 		for index, current_token in enumerate(self.tokens):
 			current_token_type = current_token['type']
+
 			if current_token_type is TokenType.ENDOFLINE:
 				writer.write_uint8(token_type_eol.value)
 				if debug:
@@ -662,7 +669,7 @@ class QB:
 				next_token = self.tokens[index + 1]
 				if next_token['type'] is not TokenType.NAME:
 					print_token_error_message(next_token)
-					raise InvalidFormatError(F"Expected script name but found `{next_token['type']}`...")
+					raise InvalidFormatError(F"Expected script name token `{TokenType.NAME}` but found `{next_token['type']}`...")
 
 				parsing_script = True
 				current_script_name = next_token['value']
@@ -807,7 +814,7 @@ class QB:
 				writer.write_uint8(current_token_type.value)
 				continue
 
-			# these are not supported... fallback to alternative tokens
+			# these are not supported in any games(?) – fallback to alternative tokens
 			elif current_token_type is TokenType.KEYWORD_AND:
 				writer.write_uint8(TokenType.OPERATOR_AND.value)
 				continue
@@ -887,6 +894,7 @@ class QB:
 			else:
 				# @note: dump all the remaining one-byte tokens here...
 				# assuming that they don't require any extra housekeeping
+				#print(F"Writing unhandled 8bit token `{current_token_type}`")
 				writer.write_uint8(current_token_type.value)
 				continue
 
