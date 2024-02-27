@@ -28,6 +28,11 @@ colorama.init(autoreset=True)
 
 
 # -------------------------------------------------------------------------------------------------
+def print_token_error_message(token):
+	print(highlight_error_with_indicator(token['source'], token['index'], token['start'], token['end']))
+
+
+# -------------------------------------------------------------------------------------------------
 def highlight_error_with_indicator(line, line_number, start_index, end_index):
 	"""
 	Highlights an error in a given line of code, prefixes it with a line number, and
@@ -156,6 +161,16 @@ class InvalidFormatError(Exception):
 
 # -------------------------------------------------------------------------------------------------
 class InvalidTokenError(Exception):
+	pass
+
+
+# -------------------------------------------------------------------------------------------------
+class BracketMismatchError(Exception):
+	pass
+
+
+# -------------------------------------------------------------------------------------------------
+class ContextualSyntaxError(Exception):
 	pass
 
 
@@ -525,18 +540,19 @@ class QB:
 	# and the `to_file` method just dumps the bytes that have generated already...
 	params = {
 		'game': GameVersion.NONE,
+		'debug': True,
 	}
 
 	# ---------------------------------------------------------------------------------------------
-	def __init__(self):
+	def __init__(self, params={}, defines=[]):
 		self.stream = io.BytesIO()
+		self.defines.extend(defines)
+		self.params.update(params)
 
 	# ---------------------------------------------------------------------------------------------
 	@classmethod
-	def from_file(cls, filename, params, defines):
-		qb = cls() # oaky
-		qb.defines.extend(defines)
-		qb.params.update(params)
+	def from_file(cls, filename, params={}, defines=[]):
+		qb = cls(params, defines) # oaky
 		pathname = Path(filename).resolve()
 		extension = pathname.suffix.lower().strip('.')
 
@@ -555,10 +571,8 @@ class QB:
 
 	# ---------------------------------------------------------------------------------------------
 	@classmethod
-	def from_string(cls, string, params, defines):
-		qb = cls() # oaky
-		qb.defines.extend(defines)
-		qb.params.update(params)
+	def from_string(cls, string, params={}, defines=[]):
+		qb = cls(params, defines) # oaky
 		try:
 			source = StringLineIterator(string)
 			qb.compile(source)
@@ -575,7 +589,7 @@ class QB:
 		return self.params.get('game', GameVersion.NONE).value[1]
 
 	# ---------------------------------------------------------------------------------------------
-	def compile(self, source, debug=True):
+	def compile(self, source):
 
 		# -----------------------------------------------------------------------------------------
 		def get_next_token(tokens):
@@ -585,18 +599,25 @@ class QB:
 				return None
 
 		# -----------------------------------------------------------------------------------------
+		debug = self.params['debug']
 		token_type_eol = TokenType.ENDOFLINENUMBER if debug else TokenType.ENDOFLINE
+
+		# -----------------------------------------------------------------------------------------
+		parsing_script = False
+		current_script_name = None
+		current_token = None
+		parenth_count = 0
+		curly_count = 0
+		curly_tracker = [] # (ArrayCount, StructCount)
+		square_count = 0
+		square_tracker = [] # (ArrayCount, StructCount)
+		loop_count = 0
 
 		# -----------------------------------------------------------------------------------------
 		if debug:
 			print('')
 			print('---- compiler defines ----------')
 			print(self.defines)
-
-		# -----------------------------------------------------------------------------------------
-		parsing_script = False
-		current_script_name = None
-		current_token = None
 
 		# -----------------------------------------------------------------------------------------
 		writer = BinaryWriter(self.stream)
@@ -612,18 +633,24 @@ class QB:
 			current_token_type = current_token['type']
 			current_line = current_token['index']
 
+			#if previous_token is not None:
+			#	if previous_token['type'] is token_type_eol:
+			#		print('Yes, the previous token was EOL')
+
 			if current_token_type is TokenType.ENDOFLINE:
 				writer.write_uint8(token_type_eol.value)
 				if debug:
 					writer.write_uint32(current_token['value'])
+				continue
 
 			elif current_token_type is TokenType.KEYWORD_SCRIPT:
 				if parsing_script:
+					print_token_error_message(current_token)
 					raise InvalidFormatError(F"Unexpected `script` keyword while already inside a script at line {current_line}...")
 
 				next_token = get_next_token(iterator)
 				if next_token['type'] is not TokenType.NAME:
-					print(highlight_error_with_indicator(next_token['source'], next_token['index'], next_token['start'], next_token['end']))
+					print_token_error_message(next_token)
 					raise InvalidFormatError(F"Expected script name but found `{next_token['type']}`...")
 
 				parsing_script = True
@@ -637,70 +664,173 @@ class QB:
 
 			elif current_token_type is TokenType.KEYWORD_ENDSCRIPT:
 				if not parsing_script:
-					raise InvalidFormatError(F"Unexpected `endscript` keyword without matching script at line {current_line}...")
+					print_token_error_message(current_token)
+					raise InvalidFormatError("Unexpected `endscript` keyword without matching script at line...")
 				parsing_script = False
 				current_script_name = None
 				writer.write_uint8(TokenType.KEYWORD_ENDSCRIPT.value)
+				continue
 
 			elif current_token_type is TokenType.KEYWORD_WHILE:
+				if not parsing_script:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`while` keyword can only be used inside scripts...")
+				loop_count += 1
 				writer.write_uint8(TokenType.KEYWORD_WHILE.value)
+				continue
+
+			elif current_token_type is TokenType.KEYWORD_REPEAT:
+				if not parsing_script:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`repeat` keyword can only be used inside scripts...")
+				if loop_count <= 0:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`repeat` keyword can only be used with while loops...")
+				loop_count -= 1
+				writer.write_uint8(TokenType.KEYWORD_REPEAT.value)
+				continue
+
+			elif current_token_type is TokenType.KEYWORD_BREAK:
+				if not parsing_script:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`break` keyword can only be used inside scripts...")
+				if loop_count <= 0:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`break` keyword can only be used inside while loops...")
+				writer.write_uint8(TokenType.KEYWORD_BREAK.value)
+				continue
+
+			elif current_token_type is TokenType.KEYWORD_RETURN:
+				if not parsing_script:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`return` keyword can only be used inside scripts...")
+				writer.write_uint8(TokenType.KEYWORD_RETURN.value)
+				continue
+
+			elif current_token_type is TokenType.STARTSTRUCT:
+				curly_count += 1
+				curly_tracker.append((square_count, curly_count))
+				writer.write_uint8(TokenType.STARTSTRUCT.value)
+				continue
+
+			elif current_token_type is TokenType.ENDSTRUCT:
+				if (curly_count < 1):
+					print_token_error_message(current_token)
+					raise BracketMismatchError('Curly bracket mismatch!')
+				if (curly_tracker[curly_count - 1][0] != square_count):
+					print_token_error_message(current_token)
+					raise BracketMismatchError('Square bracket mismatch!')
+				curly_count -= 1
+				curly_tracker.pop(curly_count)
+				writer.write_uint8(TokenType.ENDSTRUCT.value)
+				continue
+
+			elif current_token_type is TokenType.STARTARRAY:
+				square_count += 1
+				square_tracker.append((square_count, curly_count))
+				writer.write_uint8(TokenType.STARTARRAY.value)
+				continue
+
+			elif current_token_type is TokenType.ENDARRAY:
+				if (square_count < 1):
+					print_token_error_message(current_token)
+					raise BracketMismatchError('Square bracket mismatch!')
+				if (square_tracker[square_count - 1][1] != curly_count):
+					print_token_error_message(current_token)
+					raise BracketMismatchError('Curly bracket mismatch!')
+				square_count -= 1
+				square_tracker.pop(square_count)
+				writer.write_uint8(TokenType.ENDARRAY.value)
+				continue
+
+			elif current_token_type is TokenType.OPENPARENTH:
+				parenth_count += 1
+				writer.write_uint8(TokenType.OPENPARENTH.value)
+				continue
+
+			elif current_token_type is TokenType.CLOSEPARENTH:
+				parenth_count -= 1
+				# @todo: handle random stuff here
+				writer.write_uint8(TokenType.CLOSEPARENTH.value)
+				continue
 
 			elif current_token_type in (TokenType.OPERATOR_SHIFTRIGHT, TokenType.OPERATOR_SHIFTLEFT):
-				if self.get_game_type() > GameType.THUG1:
-					print(highlight_error_with_indicator(current_token['source'], current_token['index'], current_token['start'], current_token['end']))
+				print_token_error_message(current_token)
+				raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
+				writer.write_uint8(current_token_type.value)
+				continue
+
+			elif current_token_type in (TokenType.GREATERTHANEQUAL, TokenType.LESSTHANEQUAL):
+				if self.get_game_type() == GameType.THPG:
+					print_token_error_message(current_token)
 					raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
 				writer.write_uint8(current_token_type.value)
+				continue
 
 			# these are not supported... fallback to alternative tokens
 			elif current_token_type is TokenType.KEYWORD_AND:
 				writer.write_uint8(TokenType.OPERATOR_AND.value)
+				continue
 			elif current_token_type is TokenType.KEYWORD_OR:
 				writer.write_uint8(TokenType.OPERATOR_OR.value)
+				continue
 			elif current_token_type is TokenType.EQUALS:
 				writer.write_uint8(TokenType.ASSIGN.value)
-
-			elif current_token_type is TokenType.KEYWORD_REPEAT:
-				writer.write_uint8(TokenType.KEYWORD_REPEAT.value)
+				continue
 
 			elif current_token_type is TokenType.ARGUMENT:
 				writer.write_uint8(TokenType.ARGUMENT.value)
 				writer.write_uint8(TokenType.NAME.value)
 				writer.write_uint32(resolve_checksum_tuple(current_token['value']))
+				continue
 
 			elif current_token_type is TokenType.ALLARGS:
 				writer.write_uint8(TokenType.ALLARGS.value)
+				continue
 
 			elif current_token_type is TokenType.NAME:
 				writer.write_uint8(TokenType.NAME.value)
 				writer.write_uint32(resolve_checksum_tuple(current_token['value']))
+				continue
 
 			elif current_token_type is TokenType.INTEGER:
 				writer.write_uint8(TokenType.INTEGER.value)
 				writer.write_int32(current_token['value'])
+				continue
 
 			elif current_token_type is TokenType.FLOAT:
 				writer.write_uint8(TokenType.FLOAT.value)
 				writer.write_float(current_token['value'])
+				continue
 
 			elif current_token_type is TokenType.PAIR:
 				writer.write_uint8(TokenType.PAIR.value)
 				writer.write_float(current_token['value'][0])
 				writer.write_float(current_token['value'][1])
+				continue
 
 			elif current_token_type is TokenType.VECTOR:
 				writer.write_uint8(TokenType.VECTOR.value)
 				writer.write_float(current_token['value'][0])
 				writer.write_float(current_token['value'][1])
 				writer.write_float(current_token['value'][2])
+				continue
+
+			elif current_token_type in (TokenType.STRING, TokenType.LOCALSTRING):
+				writer.write_uint8(current_token_type.value)
+				writer.write_uint32(len(current_token['value']))
+				writer.write_string(current_token['value'])
+				writer.write_uint8(0)
+				continue
 
 			elif current_token_type is TokenType.KEYWORD_RANDOMRANGE or current_token_type is TokenType.KEYWORD_RANDOMRANGE2:
 				if not parsing_script:
-					print(highlight_error_with_indicator(current_token['source'], current_token['index'], current_token['start'], current_token['end']))
-					raise InvalidFormatError(F"`RandomRange` keyword can only be used inside scripts...")
+					print_token_error_message(current_token)
+					raise InvalidFormatError("`RandomRange` keyword can only be used inside scripts...")
 
 				next_token = get_next_token(iterator)
 				if next_token['type'] is not TokenType.PAIR:
-					print(highlight_error_with_indicator(next_token['source'], next_token['index'], next_token['start'], next_token['end']))
+					print_token_error_message(next_token)
 					raise InvalidFormatError(F"Expected `{TokenType.PAIR}` token proceeding `{current_token_type}`, but found `{next_token['type']}`...")
 
 				self.tokens.append(current_token)
@@ -717,13 +847,15 @@ class QB:
 				TokenType.KEYWORD_RANDOMNOREPEAT,
 				TokenType.KEYWORD_RANDOMPERMUTE,
 			):
-				print(highlight_error_with_indicator(current_token['source'], current_token['index'], current_token['start'], current_token['end']))
+				print_token_error_message(current_token)
 				raise NotImplementedError(F"Random keyword `{current_token_type}` is not supported yet...")
+				continue
 
 			else:
 				# @note: dump all the remaining one-byte tokens here...
 				# assuming that they don't require any extra housekeeping
 				writer.write_uint8(current_token_type.value)
+				continue
 
 			self.tokens.append(current_token)
 
@@ -748,4 +880,11 @@ class QB:
 		print(self.stream.getvalue().hex())
 		with open(pathname, 'wb') as out:
 			out.write(self.stream.getvalue())
+		return True
+
+	# ---------------------------------------------------------------------------------------------
+	def to_console(self):
+		if not self.stream:
+			raise ValueError('The byte stream has no data!')
+		print(self.stream.getvalue().hex())
 		return True

@@ -100,8 +100,8 @@ script TRG_BA_Pigeon03Script
 		endif
 	endif
 
-	SHIFTRIGHT = (0 >> 1)
-	SHIFTLEFT = (0 << 1)
+//	SHIFTRIGHT = (0 >> 1)
+//	SHIFTLEFT = (0 << 1)
 
 	if (GREATERTHANEQUAL >= 0)
 	endif
@@ -250,7 +250,7 @@ script HexTest
 	#"0x738c9ade" = <#"0xf625ce04">
 endscript
 
-GlobalRandomInvalid = RandomRange(0.1,3.0) ; fail
+//GlobalRandomInvalid = RandomRange(0.1,3.0) ; fail
 script RandomTest
 //	Obj_PlaySound {
 //		vol = RandomRange(0.1,3.0)

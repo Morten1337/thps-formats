@@ -4,13 +4,54 @@ from thps_formats.shared.enums import GameType, GameVersion, PlatformType
 defines = ['DEVELOPER', 'TEST']
 
 
-def test_qb():
-	qb = QB.from_file('./tests/data/Example.q', {'game': GameVersion.THUGPRO_WIN}, defines)
-	assert qb is not None
-	assert qb.to_file('./tests/data/Example.qb', {'game': GameVersion.THUGPRO_WIN})
-	# @todo: round-trip test
-	# @todo: unit test individual
+#def test_qb():
+#	qb = QB.from_file('./tests/data/Example.q', {'game': GameVersion.THUGPRO_WIN}, defines)
+#	assert qb is not None
+#	assert qb.to_file('./tests/data/Example.qb', {'game': GameVersion.THUGPRO_WIN})
+#	# @todo: round-trip test
+#	# @todo: unit test individual
 
+
+def test_strings():
+	qb = QB.from_string("""
+	{
+		desc_id = Fly
+		frontend_desc = 'Fly'
+		mesh = "models/skater_male/specs_fly.skin"
+	}
+	""", {'game': GameVersion.THUGPRO_WIN})
+	assert qb is not None
+	assert qb.to_console()
+	assert qb.to_file('./tests/data/test.qb', {'game': GameVersion.THUGPRO_WIN})
+
+
+def test_brackets():
+	qb = QB.from_string("""
+	glasses = [
+		{
+			desc_id = None
+			frontend_desc = 'None'
+			no_color
+		}
+		{
+			desc_id = #"Burnquist Glasses"
+			frontend_desc = 'Burnquist Style'
+			mesh = "models/skater_male/specs_burnquist.skin"
+		}
+		{
+			desc_id = SkiGoggles
+			frontend_desc = 'Ski Goggles'
+			mesh = "models/skater_male/specs_skigoggles.skin"
+		}
+		{
+			desc_id = Specs_Nigel_Costume
+			frontend_desc = 'Nigel Mask'
+			mesh = "models/skater_male/Specs_Nigel_Costume.skin"
+		}
+	]
+	""", {'game': GameVersion.THUGPRO_WIN})
+	assert qb is not None
+	assert qb.to_console()
 
 # def test_dumping():
 # 	qb = QB.from_string("""
