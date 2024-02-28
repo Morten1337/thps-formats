@@ -1,3 +1,4 @@
+import os
 import io
 import re
 
@@ -80,15 +81,41 @@ def resolve_checksum_tuple(value):
 	if value[0] is not None:
 		checksum = crc32_generate(value[0])
 		#print(F"Resolving checksum {checksum:#010x}")
-		return checksum
+		return checksum, value[0]
 
 	# if we (only) have the checksum, just return it
 	if value[1] is not None and isinstance(value[1], int):
 		checksum = value[1]
 		#print(F"Resolving checksum {checksum:#010x}")
-		return checksum
+		return checksum, None
 
 	raise ValueError('Trying to resolve checksum, but no name or checksum was passed...')
+
+
+# -------------------------------------------------------------------------------------------------
+class IfPointer:
+
+	# ---------------------------------------------------------------------------------------------
+	def __init__(self, offset):
+		self.if_pos = offset
+		self.else_pos = -1
+		self.endif_pos = -1
+
+	# ---------------------------------------------------------------------------------------------
+	def get_if_length(self):
+		if (self.else_pos >= 0):
+			return ((self.else_pos + 2) - self.if_pos)
+		elif (self.endif_pos >= 0):
+			return (self.endif_pos - self.if_pos)
+		else:
+			return 0
+
+	# ---------------------------------------------------------------------------------------------
+	def get_else_length(self):
+		if (self.endif_pos >= 0):
+			return (self.endif_pos - self.else_pos)
+		else:
+			return -1
 
 
 # -------------------------------------------------------------------------------------------------
@@ -168,10 +195,10 @@ class QTokenIterator:
 		'ENDSCRIPT': (TokenType.KEYWORD_ENDSCRIPT, None),
 		'IF': (TokenType.KEYWORD_IF, None),
 		'DOIF': (TokenType.KEYWORD_IF, None),
-		'ELSE': (TokenType.KEYWORD_IF, None),
+		'ELSE': (TokenType.KEYWORD_ELSE, None),
 		'DOELSE': (TokenType.KEYWORD_ELSE, None),
-		'ELSEIF': (TokenType.KEYWORD_ELSE, None),
-		'DOELSEIF': (TokenType.KEYWORD_ELSE, None),
+		'ELSEIF': (TokenType.KEYWORD_ELSEIF, None),
+		'DOELSEIF': (TokenType.KEYWORD_ELSEIF, None),
 		'ENDIF': (TokenType.KEYWORD_ENDIF, None),
 		'RETURN': (TokenType.KEYWORD_RETURN, None),
 		'RANDOMRANGE': (TokenType.KEYWORD_RANDOMRANGE, None),
@@ -410,6 +437,7 @@ class QTokenIterator:
 					token_type, token_value = (TokenType.ARGUMENT, (None, int(value, 0)))
 
 				elif kind == 'ARGUMENT':
+					value = strip_argument_string_stuff(value)
 					token_type, token_value = (TokenType.ARGUMENT, (value, None))
 				elif kind == 'ALLARGS':
 					token_type, token_value = (TokenType.ALLARGS, None)
@@ -449,29 +477,26 @@ class QTokenIterator:
 
 # -------------------------------------------------------------------------------------------------
 class QB:
-
-	# output byte stream
-	stream = None
-	# checksum debug table
-	checksums = []
-	# defined flags
-	defines = []
-	# q tokens
-	tokens = []
-
-	# @todo: Probably need to change this as we want different input and output parameters?
-	# Right now the compiler will generate the bytes based on the input parameters anyways,
-	# and the `to_file` method just dumps the bytes that have generated already...
-	params = {
-		'game': GameVersion.NONE,
-		'debug': True,
-	}
-
+	
 	# ---------------------------------------------------------------------------------------------
 	def __init__(self, params={}, defines=[]):
+
+		# output byte stream
 		self.stream = io.BytesIO()
-		self.defines.extend(defines)
-		self.params.update(params)
+		# checksum debug table
+		self.checksums = {}
+		# defined flags
+		self.defines = [] + defines
+		# q tokens
+		self.tokens = []
+
+		# @todo: Probably need to change this as we want different input and output parameters?
+		# Right now the compiler will generate the bytes based on the input parameters anyways,
+		# and the `to_file` method just dumps the bytes that have generated already...
+		self.params = {
+			'game': GameVersion.NONE,
+			'debug': True
+		} | params
 
 	# ---------------------------------------------------------------------------------------------
 	@classmethod
@@ -530,6 +555,8 @@ class QB:
 		parsing_script = False
 		# the name/checksum of the current script...
 		current_script_name = None
+		# for keeping track of if statements
+		if_count = 0
 		# for keeping track of open loops
 		loop_count = 0
 		# for keeping track of open parentheses
@@ -544,6 +571,8 @@ class QB:
 		script_square_count = 0
 		# stores tuples of square, curly bracket counts... used for housekeeping
 		square_tracker = []
+		# housekeeping for if statements... 
+		if_tracker = []
 
 		# -----------------------------------------------------------------------------------------
 		if debug:
@@ -563,7 +592,7 @@ class QB:
 		# and instantiate token iterators as needed, then consolidate them all in the end.
 		# There should also be a limit to how many levels we want to handle. Maybe one is enough?
 
-		# -----------------------------------------------------------------------------------------
+		# ---- write byte code --------------------------------------------------------------------
 		for index, current_token in enumerate(self.tokens):
 			current_token_type = current_token['type']
 
@@ -712,6 +741,57 @@ class QB:
 				writer.write_uint8(TokenType.CLOSEPARENTH.value)
 				continue
 
+			elif current_token_type is TokenType.KEYWORD_IF:
+				if not parsing_script:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`if` keyword can only be used inside scripts...")
+				previous_token = self.tokens[index - 1]
+				if previous_token['type'] is not TokenType.ENDOFLINE:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`if` keyword must be the first word on its line...")
+				if_count += 1
+				if self.get_game_type() >= GameType.THUG2:
+					writer.write_uint8(TokenType.KEYWORD_IF2.value)
+					if_tracker.append(IfPointer(writer.stream.tell()))
+					writer.write_uint16(0x6969) # placeholder
+				else:
+					writer.write_uint8(TokenType.KEYWORD_IF.value)
+				continue
+
+			elif current_token_type is TokenType.KEYWORD_ELSE:
+				# @todo: error checking
+				if self.get_game_type() >= GameType.THUG2:
+					writer.write_uint8(TokenType.KEYWORD_ELSE2.value)
+					if_tracker[if_count - 1].else_pos = writer.stream.tell()
+					writer.write_uint16(0x6969) # placeholder
+				else:
+					writer.write_uint8(TokenType.KEYWORD_ELSE.value)
+				continue
+
+			elif current_token_type is TokenType.KEYWORD_ELSEIF:
+				if self.get_game_type() == GameType.THPG:
+					print_token_error_message(current_token)
+					raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
+				# @todo: implement? can use regular if and else tokens for the other games...
+				continue
+
+			elif current_token_type is TokenType.KEYWORD_ENDIF:
+				# @todo: error checking
+				if_count -= 1
+				writer.write_uint8(current_token_type.value)
+				if self.get_game_type() >= GameType.THUG2:
+					if_tracker[if_count].endif_pos = writer.stream.tell()
+					if if_tracker[if_count].if_pos >= 0:
+						writer.seek(if_tracker[if_count].if_pos)
+						writer.write_uint16(if_tracker[if_count].get_if_length())
+						writer.seek(0, os.SEEK_END)
+					if if_tracker[if_count].else_pos >= 0:
+						writer.seek(if_tracker[if_count].else_pos)
+						writer.write_uint16(if_tracker[if_count].get_else_length())
+						writer.seek(0, os.SEEK_END)
+					if_tracker.pop(if_count)
+				continue
+
 			elif current_token_type in (TokenType.OPERATOR_SHIFTRIGHT, TokenType.OPERATOR_SHIFTLEFT):
 				print_token_error_message(current_token)
 				raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
@@ -739,7 +819,10 @@ class QB:
 			elif current_token_type is TokenType.ARGUMENT:
 				writer.write_uint8(TokenType.ARGUMENT.value)
 				writer.write_uint8(TokenType.NAME.value)
-				writer.write_uint32(resolve_checksum_tuple(current_token['value']))
+				checksum, name = resolve_checksum_tuple(current_token['value'])
+				writer.write_uint32(checksum)
+				if name:
+					self.checksums[checksum] = name
 				continue
 
 			elif current_token_type is TokenType.ALLARGS:
@@ -748,7 +831,10 @@ class QB:
 
 			elif current_token_type is TokenType.NAME:
 				writer.write_uint8(TokenType.NAME.value)
-				writer.write_uint32(resolve_checksum_tuple(current_token['value']))
+				checksum, name = resolve_checksum_tuple(current_token['value'])
+				writer.write_uint32(checksum)
+				if name:
+					self.checksums[checksum] = name
 				continue
 
 			elif current_token_type is TokenType.INTEGER:
@@ -776,7 +862,7 @@ class QB:
 
 			elif current_token_type in (TokenType.STRING, TokenType.LOCALSTRING):
 				writer.write_uint8(current_token_type.value)
-				writer.write_uint32(len(current_token['value']))
+				writer.write_uint32(len(current_token['value']) + 1)
 				writer.write_string(current_token['value'])
 				writer.write_uint8(0)
 				continue
@@ -809,8 +895,21 @@ class QB:
 				writer.write_uint8(current_token_type.value)
 				continue
 
+		# ---- write debug table ------------------------------------------------------------------
+		for checksum, name in self.checksums.items():
+			writer.write_uint8(TokenType.CHECKSUM_NAME.value)
+			writer.write_uint32(checksum)
+			writer.write_string(name)
+			writer.write_uint8(0)
+	
+		# ---- write end of file ------------------------------------------------------------------
+		writer.write_uint8(TokenType.ENDOFFILE.value)
+
 		# ---- debugging --------------------------------------------------------------------------
 		if debug:
+			print('---- checksums -----------------')
+			for checksum, name in self.checksums.items():
+				print(F"{checksum:#010x} '{name}'")
 			print('---- tokens --------------------')
 			for token in self.tokens:
 				print(token)

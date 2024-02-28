@@ -1,3 +1,4 @@
+import os
 import io
 import struct
 import binascii
@@ -10,6 +11,9 @@ class BinaryWriter(object):
 			self.stream = io.BytesIO(stream)
 		else:
 			self.stream = stream
+
+	def seek(self, offset, whence=os.SEEK_SET):
+		return self.stream.seek(offset, whence)
 
 	def write_byte(self, value):
 		if type(value) is bytes:

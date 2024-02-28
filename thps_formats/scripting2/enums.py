@@ -107,6 +107,11 @@ class TokenType(Enum):
 	# hehe
 	COLON = 0x42
 
+	# THUG2 additional tokens
+	KEYWORD_IF2 = 0x47
+	KEYWORD_ELSE2 = 0x48
+	KEYWORD_SHORTJUMP = 0x49
+
 	# Compiler
 	# These output as Jump tokens 0x2E but are used outside of randoms so we need to handle them differently in code.
 	INTERNAL_DEFINE = 0x52

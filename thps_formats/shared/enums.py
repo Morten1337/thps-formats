@@ -1,3 +1,4 @@
+from functools import total_ordering
 from enum import Enum, auto
 
 # @note: I don't know about all this... Maybe it's a bit too much???
@@ -25,6 +26,7 @@ class PlatformType(Enum):
 
 
 # -------------------------------------------------------------------------------------------------
+@total_ordering
 class GameType(Enum):
 	# Default
 	NONE = (0, 0)
@@ -50,6 +52,12 @@ class GameType(Enum):
 	def __lt__(self, other):
 		if self.__class__ is other.__class__:
 			return self.value < other.value
+		return NotImplemented
+
+	# ---------------------------------------------------------------------------------------------
+	def __eq__(self, other):
+		if self.__class__ is other.__class__:
+			return self.value == other.value
 		return NotImplemented
 
 
