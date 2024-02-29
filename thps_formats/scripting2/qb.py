@@ -670,7 +670,6 @@ class QB:
 				writer.write_uint8(token_type_eol.value)
 				if debug:
 					writer.write_uint32(current_token['value'])
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_SCRIPT:
 				if parsing_script:
@@ -686,7 +685,6 @@ class QB:
 				script_curly_count = curly_count
 				script_square_count = square_count
 				writer.write_uint8(TokenType.KEYWORD_SCRIPT.value)
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_ENDSCRIPT:
 				if not parsing_script:
@@ -710,7 +708,6 @@ class QB:
 				parsing_script = False
 				current_script_name = None
 				writer.write_uint8(TokenType.KEYWORD_ENDSCRIPT.value)
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_WHILE:
 				if not parsing_script:
@@ -722,7 +719,6 @@ class QB:
 					raise ContextualSyntaxError("`while` keyword must be the first word on its line...")
 				loop_count += 1
 				writer.write_uint8(TokenType.KEYWORD_WHILE.value)
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_REPEAT:
 				if not parsing_script:
@@ -737,7 +733,6 @@ class QB:
 					raise ContextualSyntaxError("`repeat` keyword must be the first word on its line...")
 				loop_count -= 1
 				writer.write_uint8(TokenType.KEYWORD_REPEAT.value)
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_BREAK:
 				if not parsing_script:
@@ -751,7 +746,6 @@ class QB:
 					print_token_error_message(current_token)
 					raise ContextualSyntaxError("`break` keyword must be the first word on its line...")
 				writer.write_uint8(TokenType.KEYWORD_BREAK.value)
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_RETURN:
 				if not parsing_script:
@@ -762,13 +756,11 @@ class QB:
 					print_token_error_message(current_token)
 					raise ContextualSyntaxError("`return` keyword must be the first word on its line...")
 				writer.write_uint8(TokenType.KEYWORD_RETURN.value)
-				continue
 
 			elif current_token_type is TokenType.STARTSTRUCT:
 				curly_count += 1
 				curly_tracker.append((square_count, curly_count))
 				writer.write_uint8(TokenType.STARTSTRUCT.value)
-				continue
 
 			elif current_token_type is TokenType.ENDSTRUCT:
 				if (curly_count < 1):
@@ -780,13 +772,11 @@ class QB:
 				curly_count -= 1
 				curly_tracker.pop(curly_count)
 				writer.write_uint8(TokenType.ENDSTRUCT.value)
-				continue
 
 			elif current_token_type is TokenType.STARTARRAY:
 				square_count += 1
 				square_tracker.append((square_count, curly_count))
 				writer.write_uint8(TokenType.STARTARRAY.value)
-				continue
 
 			elif current_token_type is TokenType.ENDARRAY:
 				if (square_count < 1):
@@ -798,18 +788,15 @@ class QB:
 				square_count -= 1
 				square_tracker.pop(square_count)
 				writer.write_uint8(TokenType.ENDARRAY.value)
-				continue
 
 			elif current_token_type is TokenType.OPENPARENTH:
 				parenth_count += 1
 				writer.write_uint8(TokenType.OPENPARENTH.value)
-				continue
 
 			elif current_token_type is TokenType.CLOSEPARENTH:
 				parenth_count -= 1
 				# @todo: handle random stuff here
 				writer.write_uint8(TokenType.CLOSEPARENTH.value)
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_SWITCH:
 				switch_count += 1
@@ -877,7 +864,6 @@ class QB:
 					writer.write_uint16(0x6969) # placeholder
 				else:
 					writer.write_uint8(TokenType.KEYWORD_IF.value)
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_ELSE:
 				# @todo: error checking
@@ -887,14 +873,12 @@ class QB:
 					writer.write_uint16(0x6969) # placeholder
 				else:
 					writer.write_uint8(TokenType.KEYWORD_ELSE.value)
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_ELSEIF:
 				if self.get_game_type() == GameType.THPG:
 					print_token_error_message(current_token)
 					raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
 				# @todo: implement? can use regular if and else tokens for the other games...
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_ENDIF:
 				# @todo: error checking
@@ -911,31 +895,25 @@ class QB:
 						writer.write_uint16(if_tracker[if_count].get_else_length())
 						writer.seek(0, os.SEEK_END)
 					if_tracker.pop(if_count)
-				continue
 
 			elif current_token_type in (TokenType.OPERATOR_SHIFTRIGHT, TokenType.OPERATOR_SHIFTLEFT):
 				print_token_error_message(current_token)
 				raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
 				writer.write_uint8(current_token_type.value)
-				continue
 
 			elif current_token_type in (TokenType.GREATERTHANEQUAL, TokenType.LESSTHANEQUAL):
 				if self.get_game_type() == GameType.THPG:
 					print_token_error_message(current_token)
 					raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
 				writer.write_uint8(current_token_type.value)
-				continue
 
 			# these are not supported in any games(?) – fallback to alternative tokens
 			elif current_token_type is TokenType.KEYWORD_AND:
 				writer.write_uint8(TokenType.OPERATOR_AND.value)
-				continue
 			elif current_token_type is TokenType.KEYWORD_OR:
 				writer.write_uint8(TokenType.OPERATOR_OR.value)
-				continue
 			elif current_token_type is TokenType.EQUALS:
 				writer.write_uint8(TokenType.ASSIGN.value)
-				continue
 
 			elif current_token_type is TokenType.ARGUMENT:
 				writer.write_uint8(TokenType.ARGUMENT.value)
@@ -944,11 +922,9 @@ class QB:
 				writer.write_uint32(checksum)
 				if name:
 					self.checksums[checksum] = name
-				continue
 
 			elif current_token_type is TokenType.ALLARGS:
 				writer.write_uint8(TokenType.ALLARGS.value)
-				continue
 
 			elif current_token_type is TokenType.NAME:
 				writer.write_uint8(TokenType.NAME.value)
@@ -956,37 +932,31 @@ class QB:
 				writer.write_uint32(checksum)
 				if name:
 					self.checksums[checksum] = name
-				continue
 
 			elif current_token_type is TokenType.INTEGER:
 				writer.write_uint8(TokenType.INTEGER.value)
 				writer.write_int32(current_token['value'])
-				continue
 
 			elif current_token_type is TokenType.FLOAT:
 				writer.write_uint8(TokenType.FLOAT.value)
 				writer.write_float(current_token['value'])
-				continue
 
 			elif current_token_type is TokenType.PAIR:
 				writer.write_uint8(TokenType.PAIR.value)
 				writer.write_float(current_token['value'][0])
 				writer.write_float(current_token['value'][1])
-				continue
 
 			elif current_token_type is TokenType.VECTOR:
 				writer.write_uint8(TokenType.VECTOR.value)
 				writer.write_float(current_token['value'][0])
 				writer.write_float(current_token['value'][1])
 				writer.write_float(current_token['value'][2])
-				continue
 
 			elif current_token_type in (TokenType.STRING, TokenType.LOCALSTRING):
 				writer.write_uint8(current_token_type.value)
 				writer.write_uint32(len(current_token['value']) + 1)
 				writer.write_string(current_token['value'])
 				writer.write_uint8(0)
-				continue
 
 			elif current_token_type is TokenType.KEYWORD_RANDOMRANGE or current_token_type is TokenType.KEYWORD_RANDOMRANGE2:
 				if not parsing_script:
@@ -997,7 +967,6 @@ class QB:
 					print_token_error_message(next_token)
 					raise InvalidFormatError(F"Expected `{TokenType.PAIR}` token proceeding `{current_token_type}`, but found `{next_token['type']}`...")
 				writer.write_uint8(current_token_type.value)
-				continue
 	
 			elif current_token_type in (
 				TokenType.KEYWORD_RANDOM,
@@ -1007,14 +976,12 @@ class QB:
 			):
 				print_token_error_message(current_token)
 				raise NotImplementedError(F"Random keyword `{current_token_type}` is not supported yet...")
-				continue
 
 			else:
 				# @note: dump all the remaining one-byte tokens here...
 				# assuming that they don't require any extra housekeeping
 				#print(F"Writing unhandled 8bit token `{current_token_type}`")
 				writer.write_uint8(current_token_type.value)
-				continue
 
 		# ---- write debug table ------------------------------------------------------------------
 		for checksum, name in self.checksums.items():
