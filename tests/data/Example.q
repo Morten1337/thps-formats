@@ -283,4 +283,35 @@ script ReturnTest
 	return { Something = 1234 }
 endscript
 
+script SwitchTest
 
+	switch <next_tod>
+		case morning
+			next_tod_string = "Morning"
+		case afternoon
+			next_tod_string = "Day"
+		case evening
+			next_tod_string = "Evening"
+		case night
+			next_tod_string = "Night"
+		default
+			next_tod_string = "Day"
+	endswitch
+
+	switch (tod_current_state)
+		case morning
+			current_tod_string = "Morning"
+		case afternoon
+			current_tod_string = "Day"
+		case evening
+			current_tod_string = "Evening"
+		case night
+			current_tod_string = "Night"
+		default
+			current_tod_string = "Day"
+	endswitch
+
+	Change tod_current_state = <next_tod>
+	return current_tod_string = <current_tod_string> next_tod_string = <next_tod_string>
+
+endscript

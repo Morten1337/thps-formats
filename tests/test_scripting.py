@@ -5,15 +5,49 @@ from thps_formats.shared.enums import GameType, GameVersion, PlatformType
 
 defines = ['DEVELOPER', 'TEST']
 params = {
-	'debug': True,
+	'debug': False,
 	'game': GameVersion.THUGPRO_WIN
 }
 
 
-def test_qb():
-	qb = QB.from_file('./tests/data/Example.q', params, defines)
+#def test_qb():
+#	qb = QB.from_file('./tests/data/Example.q', params, defines)
+#	assert qb is not None
+#	assert qb.to_file('./tests/data/Example.qb', params)
+
+def test_switch():
+	qb = QB.from_string("""
+	script SwitchTest
+		switch <next_tod>
+			case morning
+				next_tod_string = "Morning"
+			case afternoon
+				next_tod_string = "Day"
+			case evening
+				next_tod_string = "Evening"
+			case night
+				next_tod_string = "Night"
+			default
+				next_tod_string = "Day"
+		endswitch
+		switch (tod_current_state)
+			case morning
+				current_tod_string = "Morning"
+			case afternoon
+				current_tod_string = "Day"
+			case evening
+				current_tod_string = "Evening"
+			case night
+				current_tod_string = "Night"
+			default
+				current_tod_string = "Day"
+		endswitch
+		Change tod_current_state = <next_tod>
+		return current_tod_string = <current_tod_string> next_tod_string = <next_tod_string>
+	endscript
+	""", params)
 	assert qb is not None
-	assert qb.to_file('./tests/data/Example.qb', params)
+	assert qb.to_console()
 
 
 #def test_ifs():

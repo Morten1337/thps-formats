@@ -26,8 +26,7 @@ colorama.init(autoreset=True)
 # --- todo ----------------------------------------------------------------------------------------
 # - tokenizer->lexer->compiler
 # - token post-processing
-# 	- Switch/Case, Random, Jumps
-# - #include directive
+# 	- Random, Jumps
 # - #raw bytes
 # - fix incorrect line numbers
 # - improve error message handling
@@ -90,6 +89,47 @@ def resolve_checksum_tuple(value):
 		return checksum, None
 
 	raise ValueError('Trying to resolve checksum, but no name or checksum was passed...')
+
+
+# -------------------------------------------------------------------------------------------------
+class SwitchPointerObj:
+
+	# @todo: Might not need a separate class for this? 
+
+	# ---------------------------------------------------------------------------------------------
+	def __init__(self, offset):
+		self.current_pos = offset
+		self.next_pos = -1
+
+
+# -------------------------------------------------------------------------------------------------
+class SwitchPointer:
+
+	# @todo: Might not need a separate class for this? 
+
+	# ---------------------------------------------------------------------------------------------
+	def __init__(self):
+		self.to_next = []
+		self.to_end = []
+
+	# ---------------------------------------------------------------------------------------------
+	def set_to_next_pointer(self, offset):
+		index = len(self.to_next)
+		if index == 0:
+			self.to_next.append(SwitchPointerObj(offset))
+		else:
+			self.to_next[index - 1].next_pos = ((offset - self.to_next[index - 1].current_pos) - 2)
+			self.to_next.append(SwitchPointerObj(offset))
+
+	# ---------------------------------------------------------------------------------------------
+	def set_to_end_pointer(self, offset):
+		self.to_end.append(SwitchPointerObj(offset))
+
+	# ---------------------------------------------------------------------------------------------
+	def set_to_end_switch(self, offset):
+		for p in self.to_end:
+			p.next_pos = (offset - p.current_pos)
+		self.to_next[-1].next_pos = ((offset - self.to_next[-1].current_pos) - 1)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -568,15 +608,13 @@ class QB:
 		parsing_script = False
 		# the name/checksum of the current script...
 		current_script_name = None
-		# for keeping track of if statements
-		if_count = 0
 		# for keeping track of open loops
 		loop_count = 0
 		# for keeping track of open parentheses
 		parenth_count = 0
 		# for keeping track of open structs/curly brackets
-		curly_count = 0
 		script_curly_count = 0
+		curly_count = 0
 		# stores tuples of square, curly bracket counts... used for housekeeping
 		curly_tracker = []
 		# for keeping track of open arrays/square brackets
@@ -584,8 +622,16 @@ class QB:
 		script_square_count = 0
 		# stores tuples of square, curly bracket counts... used for housekeeping
 		square_tracker = []
+		# for keeping track of if statements
+		if_count = 0
 		# housekeeping for if statements... 
 		if_tracker = []
+		# for keeping track of switch statements
+		switch_case_expected = False
+		# for keeping track of switch statements
+		switch_count = 0
+		# housekeeping for switch statements... 
+		switch_tracker = []
 
 		# -----------------------------------------------------------------------------------------
 		if debug:
@@ -764,6 +810,57 @@ class QB:
 				# @todo: handle random stuff here
 				writer.write_uint8(TokenType.CLOSEPARENTH.value)
 				continue
+
+			elif current_token_type is TokenType.KEYWORD_SWITCH:
+				switch_count += 1
+				writer.write_uint8(TokenType.KEYWORD_SWITCH.value)
+				if self.get_game_type() >= GameType.THUG2:
+					switch_tracker.append(SwitchPointer())
+					switch_case_expected = True
+
+			elif current_token_type in (TokenType.KEYWORD_CASE, TokenType.KEYWORD_DEFAULT):
+				if switch_count <= 0:
+					print_token_error_message(current_token)
+					raise ContextualSyntaxError("`{current_token_type}` keyword must be used inside a switch statement...")
+				if self.get_game_type() >= GameType.THUG2:
+					if switch_case_expected:
+						writer.write_uint8(current_token_type.value)
+						writer.write_uint8(TokenType.KEYWORD_SHORTJUMP.value)
+						switch_tracker[switch_count - 1].set_to_next_pointer(writer.stream.tell())
+						writer.write_uint16(0x6969) # placeholder
+						switch_case_expected = False
+					else:
+						writer.write_uint8(TokenType.KEYWORD_SHORTJUMP.value)
+						switch_tracker[switch_count - 1].set_to_end_pointer(writer.stream.tell())
+						writer.write_uint16(0x6969) # placeholder
+						writer.write_uint8(current_token_type.value)
+						writer.write_uint8(TokenType.KEYWORD_SHORTJUMP.value)
+						switch_tracker[switch_count - 1].set_to_next_pointer(writer.stream.tell())
+						writer.write_uint16(0x6969) # placeholder
+				else:
+					writer.write_uint8(current_token_type.value)
+
+			elif current_token_type is TokenType.KEYWORD_ENDSWITCH:
+				if switch_count <= 0:
+					print_token_error_message(current_token)
+					raise InvalidFormatError("Unexpected `endswitch` keyword without corresponding `switch`...")
+				if switch_case_expected:
+					print_token_error_message(current_token)
+					raise InvalidFormatError("Unexpected `endswitch` without a `case`...")
+				writer.write_uint8(current_token_type.value)
+				if self.get_game_type() >= GameType.THUG2:
+					switch_tracker[switch_count - 1].set_to_end_switch(writer.stream.tell())
+					for p in switch_tracker[switch_count - 1].to_next:
+						writer.seek(p.current_pos)
+						writer.write_uint16(p.next_pos)
+					for p in switch_tracker[switch_count - 1].to_end:
+						writer.seek(p.current_pos)
+						writer.write_uint16(p.next_pos)
+					switch_count -= 1
+					switch_tracker.pop(switch_count)
+					writer.seek(0, os.SEEK_END)
+				else:
+					switch_count -= 1
 
 			elif current_token_type is TokenType.KEYWORD_IF:
 				if not parsing_script:
