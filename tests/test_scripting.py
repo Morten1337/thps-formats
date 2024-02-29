@@ -5,46 +5,47 @@ from thps_formats.shared.enums import GameType, GameVersion, PlatformType
 
 defines = ['DEVELOPER', 'TEST']
 params = {
-	'debug': False,
+	'debug': True,
 	'game': GameVersion.THUGPRO_WIN
 }
 
 
-#def test_qb():
-#	qb = QB.from_file('./tests/data/Example.q', params, defines)
-#	assert qb is not None
-#	assert qb.to_file('./tests/data/Example.qb', params)
-
-def test_ifs():
-	qb = QB.from_string("""
-	script IfTests
-		if (<Something> == 1)
-			<Something> = 0
-		endif
-
-		if NOT (<Something> == 1)
-			<Something> = 1
-		endif
-
-		if IsTrue Whatever
-			Change Whatever = 0
-		endif
-
-		if (Whatever)
-			print "hello"
-		else
-			if (<Something>)
-				print "hmm"
-			else
-				print "okay"
-			endif
-		endif
-
-	endscript
-	""", params)
+def test_qb():
+	qb = QB.from_file('./tests/data/Example.q', params, defines)
 	assert qb is not None
-	assert qb.to_console()
-	assert qb.to_file('./tests/data/test.qb', params)
+	assert qb.to_file('./tests/data/Example.qb', params)
+
+
+#def test_ifs():
+#	qb = QB.from_string("""
+#	script IfTests
+#		if (<Something> == 1)
+#			<Something> = 0
+#		endif
+#
+#		if NOT (<Something> == 1)
+#			<Something> = 1
+#		endif
+#
+#		if IsTrue Whatever
+#			Change Whatever = 0
+#		endif
+#
+#		if (Whatever)
+#			print "hello"
+#		else
+#			if (<Something>)
+#				print "hmm"
+#			else
+#				print "okay"
+#			endif
+#		endif
+#
+#	endscript
+#	""", params)
+#	assert qb is not None
+#	assert qb.to_console()
+#	assert qb.to_file('./tests/data/test.qb', params)
 
 # def test_scripts():
 # 	with pytest.raises(Exception):

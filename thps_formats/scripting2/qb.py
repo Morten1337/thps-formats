@@ -2,6 +2,7 @@ import os
 import io
 import re
 
+from colorama import Fore, Back, Style
 import colorama
 
 from pathlib import Path as Path
@@ -25,8 +26,7 @@ colorama.init(autoreset=True)
 # --- todo ----------------------------------------------------------------------------------------
 # - tokenizer->lexer->compiler
 # - token post-processing
-# 	- Random, RandomRange
-# 	- Jumps, Ifs
+# 	- Switch/Case, Random, Jumps
 # - #include directive
 # - #raw bytes
 # - fix incorrect line numbers
@@ -94,6 +94,8 @@ def resolve_checksum_tuple(value):
 
 # -------------------------------------------------------------------------------------------------
 class IfPointer:
+
+	# @todo: Might not need a separate class for this? 
 
 	# ---------------------------------------------------------------------------------------------
 	def __init__(self, offset):
@@ -288,8 +290,10 @@ class QTokenIterator:
 	]
 
 	# ---------------------------------------------------------------------------------------------
-	def __init__(self, lines, defines=[]):
+	def __init__(self, lines, defines=[], level=0):
 
+		# the level of nested files
+		self.level = level
 		# used for tracking #defined names
 		self.defined_names = defines
 		# keeps track of the current #ifdef scope(s)
@@ -311,7 +315,7 @@ class QTokenIterator:
 		# Macro-level validations, including tracking of open braces and other structural 
 		# considerations, should be performed by the calling function.
 
-		previous_token_type = TokenType.KEYWORD_UNDEFINED
+		previous_token_type = None
 
 		for index, line in self.lines:
 
@@ -325,7 +329,7 @@ class QTokenIterator:
 			for mo in re.finditer(self.tok_regex, stripped_line, flags=re.IGNORECASE):
 
 				kind, value = mo.lastgroup, mo.group()
-				token_type, token_value = TokenType.KEYWORD_UNDEFINED, None 
+				token_type, token_value = TokenType.KEYWORD_UNDEFINED, None
 
 				if self.skipping_block_comment:
 					if kind == 'INTERNAL_COMMENTBLOCKEND':
@@ -383,8 +387,12 @@ class QTokenIterator:
 						token_type, token_value = (TokenType.NAME, (value, None))
 
 				elif kind == 'INTERNAL_INCLUDE':
-					token_type, token_value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1])
-					print(F'Parsing #include with path `{token_value}`')
+					token_type, token_value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1].replace('"', ''))
+					if self.level > 0:
+						includepath = Path(token_value).resolve()
+						print(F'{Fore.YELLOW}WARNING: Only one level of file inclusion supported. Skipping "{includepath}"')
+						previous_token_type = TokenType.ENDOFLINE # @hack
+						continue
 				elif kind == 'INTERNAL_RAW':
 					token_type, token_value = (TokenType.INTERNAL_RAW, value.split(' ')[1])
 					print(F'Parsing #raw with bytes `{token_value}`')
@@ -398,23 +406,27 @@ class QTokenIterator:
 					token_type, token_value = (TokenType.INTERNAL_IFDEF, value.split(' ')[1])
 					self.directive_stack_names.append(token_value)
 					self.directive_stack_active.append(token_value in self.defined_names and self.directive_stack_active[-1])
+					previous_token_type = TokenType.ENDOFLINE # @hack
 					continue
 
 				elif kind == 'INTERNAL_IFNDEF':
 					token_type, token_value = (TokenType.INTERNAL_IFNDEF, value.split(' ')[1])
 					self.directive_stack_names.append(token_value)
 					self.directive_stack_active.append(token_value not in self.defined_names and self.directive_stack_active[-1])
+					previous_token_type = TokenType.ENDOFLINE # @hack
 					continue
 
 				elif kind == 'INTERNAL_ELSEDEF':
 					token_type, token_value = (TokenType.INTERNAL_ELSEDEF, self.directive_stack_names[-1])
 					if self.directive_stack_active[-2]: # Check the second last item for the outer context's state
 						self.directive_stack_active[-1] = not self.directive_stack_active[-1]
+					previous_token_type = TokenType.ENDOFLINE # @hack
 					continue
 
 				elif kind == 'INTERNAL_ENDIFDEF':
 					self.directive_stack_active.pop()
 					token_type, token_value = (TokenType.INTERNAL_ENDIFDEF, self.directive_stack_names.pop())
+					previous_token_type = TokenType.ENDOFLINE # @hack
 					continue
 
 				elif kind == 'INTERNAL_GOTO':
@@ -462,8 +474,9 @@ class QTokenIterator:
 					'start': mo.start(),
 					'end': mo.end(),
 				}
-
-			if previous_token_type is not TokenType.ENDOFLINE:
+			
+			# don't add a new line token if any of the following tokens was the previous one... 
+			if previous_token_type not in (TokenType.ENDOFLINE, TokenType.INTERNAL_INCLUDE):
 				previous_token_type = TokenType.ENDOFLINE
 				yield {
 					'type': TokenType.ENDOFLINE,
@@ -585,12 +598,23 @@ class QB:
 
 		# -----------------------------------------------------------------------------------------
 		for token in iterator:
+	
+			# handle inclusion of other q files
+			if token['type'] is TokenType.INTERNAL_INCLUDE:
+				includepath = Path(token['value']).resolve()
+				if includepath.is_file():
+					print(F'Including file "{includepath}"')
+					includesource = LineIterator(includepath)
+					includeiterator = QTokenIterator(includesource, self.defines, level=1)
+					# include all the new tokens in the list! assuming the tokenizer didn't fail...
+					self.tokens.extend(includeiterator)
+				else:
+					# this is fine, as we want to include auto-generated files that may or may not exist...
+					print(F'{Fore.YELLOW}WARNING: Could not include file "{includepath}"')
+				continue # skip writing the internal include token byte to file...
+			
+			# write the normal tokens the list list
 			self.tokens.append(token)
-
-		# @todo: Should handle the `#import` stuff here I guess?
-		# We can go through the current list of tokens and look for include tokens,
-		# and instantiate token iterators as needed, then consolidate them all in the end.
-		# There should also be a limit to how many levels we want to handle. Maybe one is enough?
 
 		# ---- write byte code --------------------------------------------------------------------
 		for index, current_token in enumerate(self.tokens):

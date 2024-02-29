@@ -200,8 +200,9 @@ End:
 	print "Ending"
 endscript
 
-#include "..\thugpro\source\generated\levelselect\levelselect_thaw.q"
-#include "..\thugpro\source\generated\levelselect\levelselect_thug2.q"
+#include "tests\data\include.q"
+//#include "..\thugpro\source\generated\levelselect\levelselect_thaw.q"
+//#include "..\thugpro\source\generated\levelselect\levelselect_thug2.q"
 
 #define DEVELOPER
 #define THUGPRO_MENU_ITEM_DEBUG
@@ -275,4 +276,11 @@ endscript
 //	Hello
 //	*/
 //endscript
+
+script ReturnTest
+	Hello
+//	break
+	return { Something = 1234 }
+endscript
+
 
