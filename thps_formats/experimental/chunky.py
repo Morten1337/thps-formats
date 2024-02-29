@@ -490,15 +490,12 @@ class AtomicSectionStruct(Struct):
 # -------------------------------------------------------------------------------------------------
 class Chunk(object):
 
-	raw = None
-	data = None
-	struct = None
-	string = None
-
-	# @todo, generalize data and struct... move string to String chunk?
-
 	def __init__(self):
-		pass
+		# @todo, generalize data and struct... move string to String chunk?
+		self.raw = None
+		self.data = None
+		self.struct = None
+		self.string = None
 
 	# parse chunk header from stream
 	def read(self, br, parent=None):
