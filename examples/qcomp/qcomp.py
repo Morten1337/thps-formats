@@ -19,4 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--compile', metavar='example.q', required=True, type=str, help='The script to compile.')
     parser.add_argument('--debug', action='store_true', help='include debug information')
     args = parser.parse_args()
-    compile(args)
+    try:
+        compile(args)
+    except Exception:
+        pass

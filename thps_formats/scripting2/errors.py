@@ -1,5 +1,12 @@
 from colorama import Fore, Style
 
+# --- todo ----------------------------------------------------------------------------------------
+# - line number is off by one
+# - should include filename or source in error message
+# 	- `Error:file.q:42`, `Error:import.q:22`, `Error:[string]:24` 
+# - better parentheses and bracket mismatch errors reported at endscript
+# 	- need more context? or just write the counts and the script name?
+
 
 # -------------------------------------------------------------------------------------------------
 def print_token_error_message(token):
