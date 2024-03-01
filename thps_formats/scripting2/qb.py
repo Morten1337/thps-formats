@@ -92,17 +92,6 @@ def resolve_checksum_tuple(value):
 
 
 # -------------------------------------------------------------------------------------------------
-class SwitchPointerObj:
-
-	# @todo: Might not need a separate class for this? 
-
-	# ---------------------------------------------------------------------------------------------
-	def __init__(self, offset):
-		self.current_pos = offset
-		self.next_pos = -1
-
-
-# -------------------------------------------------------------------------------------------------
 class SwitchPointer:
 
 	# @todo: Might not need a separate class for this? 
@@ -116,20 +105,20 @@ class SwitchPointer:
 	def set_to_next_pointer(self, offset):
 		index = len(self.to_next)
 		if index == 0:
-			self.to_next.append(SwitchPointerObj(offset))
+			self.to_next.append({'current': offset, 'next': -1})
 		else:
-			self.to_next[index - 1].next_pos = ((offset - self.to_next[index - 1].current_pos) - 2)
-			self.to_next.append(SwitchPointerObj(offset))
+			self.to_next[index - 1]['next'] = ((offset - self.to_next[index - 1]['current']) - 2)
+			self.to_next.append({'current': offset, 'next': -1})
 
 	# ---------------------------------------------------------------------------------------------
 	def set_to_end_pointer(self, offset):
-		self.to_end.append(SwitchPointerObj(offset))
+		self.to_end.append({'current': offset, 'next': -1})
 
 	# ---------------------------------------------------------------------------------------------
 	def set_to_end_switch(self, offset):
 		for p in self.to_end:
-			p.next_pos = (offset - p.current_pos)
-		self.to_next[-1].next_pos = ((offset - self.to_next[-1].current_pos) - 1)
+			p['next'] = (offset - p['current'])
+		self.to_next[-1]['next'] = ((offset - self.to_next[-1]['current']) - 1)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -548,7 +537,7 @@ class QB:
 		# and the `to_file` method just dumps the bytes that have generated already...
 		self.params = {
 			'game': GameVersion.NONE,
-			'debug': True
+			'debug': False
 		} | params
 
 	# ---------------------------------------------------------------------------------------------
@@ -838,11 +827,11 @@ class QB:
 				if self.get_game_type() >= GameType.THUG2:
 					switch_tracker[switch_count - 1].set_to_end_switch(writer.stream.tell())
 					for p in switch_tracker[switch_count - 1].to_next:
-						writer.seek(p.current_pos)
-						writer.write_uint16(p.next_pos)
+						writer.seek(p['current'])
+						writer.write_uint16(p['next'])
 					for p in switch_tracker[switch_count - 1].to_end:
-						writer.seek(p.current_pos)
-						writer.write_uint16(p.next_pos)
+						writer.seek(p['current'])
+						writer.write_uint16(p['next'])
 					switch_count -= 1
 					switch_tracker.pop(switch_count)
 					writer.seek(0, os.SEEK_END)
@@ -958,7 +947,7 @@ class QB:
 				writer.write_string(current_token['value'])
 				writer.write_uint8(0)
 
-			elif current_token_type is TokenType.KEYWORD_RANDOMRANGE or current_token_type is TokenType.KEYWORD_RANDOMRANGE2:
+			elif current_token_type in (TokenType.KEYWORD_RANDOMRANGE, TokenType.KEYWORD_RANDOMRANGE2):
 				if not parsing_script:
 					print_token_error_message(current_token)
 					raise InvalidFormatError("`RandomRange` keyword can only be used inside scripts...")
