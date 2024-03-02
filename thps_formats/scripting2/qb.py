@@ -122,31 +122,21 @@ class SwitchPointer:
 
 
 # -------------------------------------------------------------------------------------------------
-class IfPointer:
+def calculate_if_jump_offset(offsets):
+	if (offsets['else'] >= 0):
+		return ((offsets['else'] + 2) - offsets['if'])
+	elif (offsets['endif'] >= 0):
+		return (offsets['endif'] - offsets['if'])
+	else:
+		return -1
 
-	# @todo: Might not need a separate class for this? 
 
-	# ---------------------------------------------------------------------------------------------
-	def __init__(self, offset):
-		self.if_pos = offset
-		self.else_pos = -1
-		self.endif_pos = -1
-
-	# ---------------------------------------------------------------------------------------------
-	def get_if_length(self):
-		if (self.else_pos >= 0):
-			return ((self.else_pos + 2) - self.if_pos)
-		elif (self.endif_pos >= 0):
-			return (self.endif_pos - self.if_pos)
-		else:
-			return 0
-
-	# ---------------------------------------------------------------------------------------------
-	def get_else_length(self):
-		if (self.endif_pos >= 0):
-			return (self.endif_pos - self.else_pos)
-		else:
-			return -1
+# ---------------------------------------------------------------------------------------------
+def calculate_else_jump_offset(offsets):
+	if (offsets['endif'] >= 0):
+		return (offsets['endif'] - offsets['else'])
+	else:
+		return 0
 
 
 # -------------------------------------------------------------------------------------------------
@@ -849,7 +839,7 @@ class QB:
 				if_count += 1
 				if self.get_game_type() >= GameType.THUG2:
 					writer.write_uint8(TokenType.KEYWORD_IF2.value)
-					if_tracker.append(IfPointer(writer.stream.tell()))
+					if_tracker.append({'if': writer.stream.tell(), 'else': -1, 'endif': -1})
 					writer.write_uint16(0x6969) # placeholder
 				else:
 					writer.write_uint8(TokenType.KEYWORD_IF.value)
@@ -858,7 +848,7 @@ class QB:
 				# @todo: error checking
 				if self.get_game_type() >= GameType.THUG2:
 					writer.write_uint8(TokenType.KEYWORD_ELSE2.value)
-					if_tracker[if_count - 1].else_pos = writer.stream.tell()
+					if_tracker[if_count - 1]['else'] = writer.stream.tell()
 					writer.write_uint16(0x6969) # placeholder
 				else:
 					writer.write_uint8(TokenType.KEYWORD_ELSE.value)
@@ -874,14 +864,14 @@ class QB:
 				if_count -= 1
 				writer.write_uint8(current_token_type.value)
 				if self.get_game_type() >= GameType.THUG2:
-					if_tracker[if_count].endif_pos = writer.stream.tell()
-					if if_tracker[if_count].if_pos >= 0:
-						writer.seek(if_tracker[if_count].if_pos)
-						writer.write_uint16(if_tracker[if_count].get_if_length())
+					if_tracker[if_count]['endif'] = writer.stream.tell()
+					if if_tracker[if_count]['if'] >= 0:
+						writer.seek(if_tracker[if_count]['if'])
+						writer.write_uint16(calculate_if_jump_offset(if_tracker[if_count]))
 						writer.seek(0, os.SEEK_END)
-					if if_tracker[if_count].else_pos >= 0:
-						writer.seek(if_tracker[if_count].else_pos)
-						writer.write_uint16(if_tracker[if_count].get_else_length())
+					if if_tracker[if_count]['else'] >= 0:
+						writer.seek(if_tracker[if_count]['else'])
+						writer.write_uint16(calculate_else_jump_offset(if_tracker[if_count]))
 						writer.seek(0, os.SEEK_END)
 					if_tracker.pop(if_count)
 
