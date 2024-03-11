@@ -1,7 +1,13 @@
 import pytest
+from pathlib import Path
 
-from thps_formats.scripting2 import QB, TokenType
-from thps_formats.shared.enums import GameType, GameVersion, PlatformType
+from thps_formats.scripting2.qb import QB
+from thps_formats.scripting2.enums import TokenType
+from thps_formats.shared.enums import (
+	GameVersion,
+	GameType,
+	PlatformType
+)
 
 defines = ['DEVELOPER', 'TEST']
 params = {
@@ -10,76 +16,120 @@ params = {
 }
 
 
+def test_thugpro():
+	sourcepath = Path('d:/repos/thugpro/source/code/qb').resolve()
+	outputpath = Path('./tests/data/qb').resolve()
+	for sourcefile in sourcepath.rglob('*.q'):
+		if sourcefile.is_file():
+			outputfile = outputpath / sourcefile.relative_to(sourcepath).with_suffix('.qb')
+			outputfile.parent.mkdir(exist_ok=True, parents=True)
+			qb = QB.from_file(sourcefile, params, defines)
+			assert qb is not None
+			assert qb.to_file(outputfile, params)
+
 #def test_qb():
 #	qb = QB.from_file('./tests/data/Example.q', params, defines)
 #	assert qb is not None
 #	assert qb.to_file('./tests/data/Example.qb', params)
 
-def test_switch():
-	qb = QB.from_string("""
-	script SwitchTest
-		switch <next_tod>
-			case morning
-				next_tod_string = "Morning"
-			case afternoon
-				next_tod_string = "Day"
-			case evening
-				next_tod_string = "Evening"
-			case night
-				next_tod_string = "Night"
-			default
-				next_tod_string = "Day"
-		endswitch
-		switch (tod_current_state)
-			case morning
-				current_tod_string = "Morning"
-			case afternoon
-				current_tod_string = "Day"
-			case evening
-				current_tod_string = "Evening"
-			case night
-				current_tod_string = "Night"
-			default
-				current_tod_string = "Day"
-		endswitch
-		Change tod_current_state = <next_tod>
-		return current_tod_string = <current_tod_string> next_tod_string = <next_tod_string>
-	endscript
-	""", params)
-	assert qb is not None
-	assert qb.to_console()
+# def test_switch():
+# 	qb = QB.from_string("""
+# 	script SwitchTest
+# 		switch <next_tod>
+# 			case morning
+# 				next_tod_string = "Morning"
+# 			case afternoon
+# 				next_tod_string = "Day"
+# 			case evening
+# 				next_tod_string = "Evening"
+# 			case night
+# 				next_tod_string = "Night"
+# 			default
+# 				next_tod_string = "Day"
+# 		endswitch
+# 		switch (tod_current_state)
+# 			case morning
+# 				current_tod_string = "Morning"
+# 			case afternoon
+# 				current_tod_string = "Day"
+# 			case evening
+# 				current_tod_string = "Evening"
+# 			case night
+# 				current_tod_string = "Night"
+# 			default
+# 				current_tod_string = "Day"
+# 		endswitch
+# 		Change tod_current_state = <next_tod>
+# 		return current_tod_string = <current_tod_string> next_tod_string = <next_tod_string>
+# 	endscript
+# 	""", params)
+# 	assert qb is not None
+# 	assert qb.to_console()
 
 
-#def test_ifs():
+#def test_random2():
+#	qb = QB.from_file('./tests/data/random.q', params, defines)
+#	assert qb is not None
+#	assert qb.to_file('./tests/data/random2.qb', params)
+
+
+#def test_random3():
+#	qb = QB.from_file('./tests/data/randomweights.q', params, defines)
+#	assert qb is not None
+#	assert qb.to_file('./tests/data/randomweights2.qb', params)
+
+
+#def test_random():
 #	qb = QB.from_string("""
-#	script IfTests
-#		if (<Something> == 1)
-#			<Something> = 0
-#		endif
-#
-#		if NOT (<Something> == 1)
-#			<Something> = 1
-#		endif
-#
-#		if IsTrue Whatever
-#			Change Whatever = 0
-#		endif
-#
-#		if (Whatever)
-#			print "hello"
-#		else
-#			if (<Something>)
-#				print "hmm"
-#			else
-#				print "okay"
-#			endif
-#		endif
-#
+#	script PlayWalkStandAnim
+#		while
+#			PlayWalkAnim BlendPeriod = 0.1 Anim = Random(@*3 WStand @RandomNoRepeat(@WStandIdle1 @WStandIdle2 @WStandIdle3 @WStandIdle4 @WStandIdle5 @WStandIdle6))
+#			WaitAnimWalking
+#		repeat
+#	endscript
+#	script FL_SFX_GarageWarp01
+#		RandomNoRepeat(
+#			@Obj_PlayStream FL_ParkingGarageHorn01 emitter = TRG_SFX_SOB_GarageWarp01
+#			@Obj_PlayStream FL_ParkingGarageHorn02 emitter = TRG_SFX_SOB_GarageWarp01
+#			@Obj_PlayStream FL_ParkingGarageHorn03 emitter = TRG_SFX_SOB_GarageWarp01
+#			@Obj_PlayStream FL_ParkingGarageHorn04 emitter = TRG_SFX_SOB_GarageWarp01
+#		)
 #	endscript
 #	""", params)
 #	assert qb is not None
-#	assert qb.to_console()
-#	assert qb.to_file('./tests/data/test.qb', params)
+#	assert qb.to_file('./tests/data/test_random.qb', params)
+
+
+# def test_ifs():
+# 	qb = QB.from_string("""
+# 	script IfTests
+# 		if (<Something> == 1)
+# 			<Something> = 0
+# 		endif
+
+# 		if NOT (<Something> == 1)
+# 			<Something> = 1
+# 		endif
+
+# 		if IsTrue Whatever
+# 			Change Whatever = 0
+# 		endif
+
+# 		if (Whatever)
+# 			print "hello"
+# 		else
+# 			if (<Something>)
+# 				print "hmm"
+# 			else
+# 				print "okay"
+# 			endif
+# 		endif
+
+# 	endscript
+# 	""", params)
+# 	assert qb is not None
+# 	assert qb.to_console()
+# 	assert qb.to_file('./tests/data/test.qb', params)
 
 # def test_scripts():
 # 	with pytest.raises(Exception):

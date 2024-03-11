@@ -1,5 +1,5 @@
 import argparse
-from thps_formats.scripting2 import QB
+from thps_formats.scripting2.qb import QB
 from thps_formats.shared.enums import GameVersion
 
 

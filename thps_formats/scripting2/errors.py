@@ -74,6 +74,15 @@ def insert_color_and_reset(text, color, start_index, end_index):
 
 
 # -------------------------------------------------------------------------------------------------
+class CompilerError(Exception):
+
+	# ---------------------------------------------------------------------------------------------
+	def __init__(self, context, message):
+		super().__init__(message)
+		self.annotation = highlight_error_with_indicator(context['source'], context['index'], context['start'], context['end'])
+
+
+# -------------------------------------------------------------------------------------------------
 class InvalidFormatError(Exception):
 	pass
 
@@ -84,10 +93,15 @@ class InvalidTokenError(Exception):
 
 
 # -------------------------------------------------------------------------------------------------
-class BracketMismatchError(Exception):
+class TokenMismatchError(Exception):
 	pass
 
 
 # -------------------------------------------------------------------------------------------------
-class ContextualSyntaxError(Exception):
+class KeywordMismatchError(Exception):
+	pass
+
+
+# -------------------------------------------------------------------------------------------------
+class UnexpectedScopeError(Exception):
 	pass
