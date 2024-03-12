@@ -26,6 +26,22 @@ def test_thugpro():
 			qb = QB.from_file(sourcefile, params, defines)
 			assert qb is not None
 			assert qb.to_file(outputfile, params)
+#def test_randomvector():
+#	qb = QB.from_string("""
+#	script RandomVectorTest
+#		// this is not a vector!
+#		text = Random(@"You got shafted" @"Who built that?!" @"Serve, set, spike!" @"Shish kabob?" @"Don't build this at home!")
+#		// this is a vector!
+#		vector3 = (3.14159298, -0.75049102,3)
+#		vector2 = (0.00000000, 1.00000000)
+#		// this is a random range keyword!
+#		range = RandomRange(0.1,3.0)
+#		// this is a bad vector!
+#		invalid = (1.-9999999,.3,.4)
+#	endscript
+#	""", params)
+#	assert qb is not None
+#	assert qb.to_console()
 
 #def test_qb():
 #	qb = QB.from_file('./tests/data/Example.q', params, defines)
