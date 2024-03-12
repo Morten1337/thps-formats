@@ -313,7 +313,7 @@ class QTokenIterator:
 	token_specs = [
 		('INTERNAL_COMMENTBLOCKBEGIN', r'\/\*'), # Begin block comment `/*`
 		('INTERNAL_COMMENTBLOCKEND', r'\*\/'), # End block comment `*/`
-		('INTERNAL_COMMENTINLINE', r'(\/\/|;)[^\n]*'), # Inline comments starting with `//` or `;`
+		('INTERNAL_COMMENTINLINE', r'(\/\/|#\/\/|;)[^\n]*'), # Inline comments starting with `//`, `#//`, or `;`
 
 		('STARTSTRUCT', r'\{'),
 		('ENDSTRUCT', r'\}'),
