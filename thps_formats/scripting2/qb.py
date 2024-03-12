@@ -430,7 +430,7 @@ class QTokenIterator:
 					print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
 					raise errors.InvalidFormatError('Unexpected `*/` without matching open block comment...')
 
-				if kind != 'INTERNAL_ELSEDEF' and kind != 'INTERNAL_ENDIFDEF':
+				if kind not in ('INTERNAL_ELSEDEF', 'INTERNAL_ENDIFDEF', 'INTERNAL_IFDEF', 'INTERNAL_IFNDEF'):
 					if not self.directive_stack_active[-1]:
 						continue
 
@@ -508,6 +508,9 @@ class QTokenIterator:
 					continue
 
 				elif kind == 'INTERNAL_ELSEDEF':
+					if not self.directive_stack_active or not self.directive_stack_names:
+						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+						raise errors.KeywordMismatchError('Unexpected `#else` keyword without matching `#ifdef`...')
 					token_type, token_value = (TokenType.INTERNAL_ELSEDEF, self.directive_stack_names[-1])
 					if self.directive_stack_active[-2]: # Check the second last item for the outer context's state
 						self.directive_stack_active[-1] = not self.directive_stack_active[-1]
@@ -515,6 +518,9 @@ class QTokenIterator:
 					continue
 
 				elif kind == 'INTERNAL_ENDIFDEF':
+					if not self.directive_stack_active or not self.directive_stack_names:
+						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+						raise errors.KeywordMismatchError('Unexpected `#endif` keyword without matching `#ifdef`...')
 					self.directive_stack_active.pop()
 					token_type, token_value = (TokenType.INTERNAL_ENDIFDEF, self.directive_stack_names.pop())
 					previous_token_type = TokenType.ENDOFLINE # @hack
