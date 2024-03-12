@@ -324,7 +324,7 @@ class QTokenIterator:
 		('EQUALS', r'=='), # Equality comparison
 		('ASSIGN', r'='), # Assignment
 
-		('INTERNAL_VECTOR', r'\(([^(@\)]*,[^(@\)]*,?[^(@\)]*)\)'), # Matches simple vectors/pairs
+		('INTERNAL_VECTOR', r'\(\-?[0-9]+(\.[0-9]+)?(,\s*\-?[0-9]+(\.[0-9]+)?)+\)'), # Matches simple vectors/pairs
 		('OPENPARENTH', r'\('),
 		('CLOSEPARENTH', r'\)'),
 
