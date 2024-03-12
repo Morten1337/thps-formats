@@ -454,7 +454,7 @@ class QTokenIterator:
 				elif kind == 'INTEGER':
 					token_type, token_value = (TokenType.INTEGER, int(value))
 				elif kind == 'HEXINTEGER':
-					token_type, token_value = (TokenType.INTEGER, int(value, 0))
+					token_type, token_value = (TokenType.HEXINTEGER, int(value, 0))
 
 				elif kind == 'STRING':
 					if value[0] == '\"':
@@ -1021,6 +1021,10 @@ class QB:
 			elif current_token_type is TokenType.INTEGER:
 				writer.write_uint8(TokenType.INTEGER.value)
 				writer.write_int32(current_token['value'])
+
+			elif current_token_type is TokenType.HEXINTEGER:
+				writer.write_uint8(TokenType.INTEGER.value)
+				writer.write_uint32(current_token['value'])
 
 			elif current_token_type is TokenType.FLOAT:
 				writer.write_uint8(TokenType.FLOAT.value)
