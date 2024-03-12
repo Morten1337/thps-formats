@@ -277,6 +277,7 @@ class QTokenIterator:
 		'AT': (TokenType.KEYWORD_AT, None),
 		'AND': (TokenType.OPERATOR_AND, None),
 		'OR': (TokenType.OPERATOR_OR, None),
+		'NOT': (TokenType.KEYWORD_NOT, None),
 	}
 
 	# ---------------------------------------------------------------------------------------------
@@ -346,6 +347,7 @@ class QTokenIterator:
 
 		('OR', r'\|\|'), # Logical OR
 		('AND', r'&&'), # Logical AND
+		('NOT', r'!'), # NOT
 
 		('SHIFTRIGHT', r'>>'),
 		('SHIFTLEFT', r'<<'),
