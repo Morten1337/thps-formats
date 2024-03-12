@@ -97,20 +97,47 @@ def is_token_type_random_keyword(token):
 
 
 # -------------------------------------------------------------------------------------------------
-def get_random_operator_count(tokens):
-	operator_count = 0
+def skip_random_operator(iterator):
 	parenth_count = 0
-	for token in tokens:
+	# @todo: skip whitespace
+	next_token = next(iterator)
+	if next_token['type'] is not TokenType.OPENPARENTH:
+		raise errors.InvalidFormatError("Random keyword must be followed by an open parenthesis...")
 
-		if is_token_type_random_keyword(token['type']):
-			# @todo: handle nested randoms
-			raise NotImplementedError('Nested Random operator...')
+	for token in iterator:
 		if token['type'] is TokenType.ENDOFFILE:
 			raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
 		elif token['type'] is TokenType.KEYWORD_ENDSCRIPT:
 			if parenth_count > 0:
 				raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
-			break
+			break # @todo: verify
+		elif token['type'] is TokenType.OPENPARENTH:
+			parenth_count += 1
+		elif token['type'] is TokenType.CLOSEPARENTH:
+			if parenth_count > 0:
+				parenth_count -= 1
+			else:
+				break
+		elif is_token_type_random_keyword(token['type']):
+			skip_random_operator(iterator)
+
+
+# -------------------------------------------------------------------------------------------------
+def get_random_operator_count(tokens):
+	operator_count = 0
+	parenth_count = 0
+	iterator = iter(tokens)
+	# @todo: skip whitespace
+	for token in iterator:
+		if is_token_type_random_keyword(token['type']):
+			skip_random_operator(iterator)
+
+		if token['type'] is TokenType.ENDOFFILE:
+			raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
+		elif token['type'] is TokenType.KEYWORD_ENDSCRIPT:
+			if parenth_count > 0:
+				raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
+			break # @todo: verify
 		elif token['type'] is TokenType.KEYWORD_AT:
 			operator_count += 1
 		elif token['type'] is TokenType.OPENPARENTH:
