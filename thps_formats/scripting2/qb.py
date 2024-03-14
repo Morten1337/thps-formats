@@ -412,168 +412,169 @@ class QTokenIterator:
 			stripped_line = line.strip()
 			length_of_line = len(stripped_line)
 
-			# skipping whitespace...
+			# skip empty lines...
 			if not stripped_line:
-				continue
+				previous_token_type = None
 
-			for mo in re.finditer(self.tok_regex, stripped_line, flags=re.IGNORECASE):
+			else:
+				for mo in re.finditer(self.tok_regex, stripped_line, flags=re.IGNORECASE):
 
-				kind, value = mo.lastgroup, mo.group()
-				token_type, token_value = TokenType.KEYWORD_UNDEFINED, None
+					kind, value = mo.lastgroup, mo.group()
+					token_type, token_value = TokenType.KEYWORD_UNDEFINED, None
 
-				if self.skipping_block_comment:
-					if kind == 'INTERNAL_COMMENTBLOCKEND':
-						self.skipping_block_comment = False
-					continue # Ignore all tokens until block comment is closed
-				elif kind == 'INTERNAL_COMMENTBLOCKBEGIN':
-					self.skipping_block_comment = True
-					continue
-				elif kind == 'INTERNAL_COMMENTBLOCKEND':
-					print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-					raise errors.InvalidFormatError('Unexpected `*/` without matching open block comment...')
+					if self.skipping_block_comment:
+						if kind == 'INTERNAL_COMMENTBLOCKEND':
+							self.skipping_block_comment = False
+						continue # Ignore all tokens until block comment is closed
+					elif kind == 'INTERNAL_COMMENTBLOCKBEGIN':
+						self.skipping_block_comment = True
+						continue
+					elif kind == 'INTERNAL_COMMENTBLOCKEND':
+						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+						raise errors.InvalidFormatError('Unexpected `*/` without matching open block comment...')
 
-				if kind not in ('INTERNAL_ELSEDEF', 'INTERNAL_ENDIFDEF', 'INTERNAL_IFDEF', 'INTERNAL_IFNDEF'):
-					if not self.directive_stack_active[-1]:
+					if kind not in ('INTERNAL_ELSEDEF', 'INTERNAL_ENDIFDEF', 'INTERNAL_IFDEF', 'INTERNAL_IFNDEF'):
+						if not self.directive_stack_active[-1]:
+							continue
+
+					if kind == 'INTERNAL_VECTOR':
+						try:
+							result, count = extract_numbers_to_tuple(value)
+							if count == 2:
+								token_type, token_value = (TokenType.PAIR, result)
+							elif count == 3:
+								token_type, token_value = (TokenType.VECTOR, result)
+							else:
+								raise errors.InvalidFormatError(f'Unexpected number of elements found when parsing vector: {count} detected... {value}')
+						except errors.InvalidFormatError as ex:
+							print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+							raise ex
+
+					elif kind == 'FLOAT':
+						token_type, token_value = (TokenType.FLOAT, float(value))
+					elif kind == 'INTEGER':
+						token_type, token_value = (TokenType.INTEGER, int(value))
+					elif kind == 'HEXINTEGER':
+						token_type, token_value = (TokenType.HEXINTEGER, int(value, 0))
+
+					elif kind == 'STRING':
+						if value[0] == '\"':
+							token_type, token_value = (TokenType.STRING, str(value[1:-1]))
+						else:
+							token_type, token_value = (TokenType.LOCALSTRING, str(value[1:-1]))
+
+					elif kind in QTokenIterator.token_misc_lookup_table.keys():
+						token_type, token_value = QTokenIterator.token_misc_lookup_table[kind]
+
+					elif kind in QTokenIterator.token_operator_lookup_table.keys():
+						token_type, token_value = QTokenIterator.token_operator_lookup_table[kind]
+
+					elif kind == 'INTERNAL_HASHTAG':
+						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+						raise NotImplementedError(f'Unsupported hashtag `{value}` at line {index}...')
+
+					elif kind == 'INTERNAL_IDENTIFIER':
+						keyword = value.upper()
+						if keyword in QTokenIterator.token_keyword_lookup_table.keys():
+							token_type, token_value = QTokenIterator.token_keyword_lookup_table[keyword]
+						else:
+							token_type, token_value = (TokenType.NAME, (value, None))
+
+					elif kind == 'INTERNAL_INCLUDE':
+						token_type, token_value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1].replace('"', ''))
+						if self.level > 0:
+							includepath = Path(token_value).resolve()
+							print(F'{Fore.YELLOW}WARNING: Only one level of file inclusion supported. Skipping "{includepath}"')
+							previous_token_type = TokenType.ENDOFLINE # @hack
+							continue
+					elif kind == 'INTERNAL_RAW':
+						token_type, token_value = (TokenType.INTERNAL_RAW, value.split(' ')[1])
+						print(F'Parsing #raw with bytes `{token_value}`')
+
+					elif kind == 'INTERNAL_DEFINE':
+						token_type, token_value = (TokenType.INTERNAL_DEFINE, value.split(' ')[1])
+						self.defined_names.append(token_value)
 						continue
 
-				if kind == 'INTERNAL_VECTOR':
-					try:
-						result, count = extract_numbers_to_tuple(value)
-						if count == 2:
-							token_type, token_value = (TokenType.PAIR, result)
-						elif count == 3:
-							token_type, token_value = (TokenType.VECTOR, result)
-						else:
-							raise errors.InvalidFormatError(f'Unexpected number of elements found when parsing vector: {count} detected... {value}')
-					except errors.InvalidFormatError as ex:
-						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-						raise ex
-
-				elif kind == 'FLOAT':
-					token_type, token_value = (TokenType.FLOAT, float(value))
-				elif kind == 'INTEGER':
-					token_type, token_value = (TokenType.INTEGER, int(value))
-				elif kind == 'HEXINTEGER':
-					token_type, token_value = (TokenType.HEXINTEGER, int(value, 0))
-
-				elif kind == 'STRING':
-					if value[0] == '\"':
-						token_type, token_value = (TokenType.STRING, str(value[1:-1]))
-					else:
-						token_type, token_value = (TokenType.LOCALSTRING, str(value[1:-1]))
-
-				elif kind in QTokenIterator.token_misc_lookup_table.keys():
-					token_type, token_value = QTokenIterator.token_misc_lookup_table[kind]
-
-				elif kind in QTokenIterator.token_operator_lookup_table.keys():
-					token_type, token_value = QTokenIterator.token_operator_lookup_table[kind]
-
-				elif kind == 'INTERNAL_HASHTAG':
-					print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-					raise NotImplementedError(f'Unsupported hashtag `{value}` at line {index}...')
-
-				elif kind == 'INTERNAL_IDENTIFIER':
-					keyword = value.upper()
-					if keyword in QTokenIterator.token_keyword_lookup_table.keys():
-						token_type, token_value = QTokenIterator.token_keyword_lookup_table[keyword]
-					else:
-						token_type, token_value = (TokenType.NAME, (value, None))
-
-				elif kind == 'INTERNAL_INCLUDE':
-					token_type, token_value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1].replace('"', ''))
-					if self.level > 0:
-						includepath = Path(token_value).resolve()
-						print(F'{Fore.YELLOW}WARNING: Only one level of file inclusion supported. Skipping "{includepath}"')
+					elif kind == 'INTERNAL_IFDEF':
+						token_type, token_value = (TokenType.INTERNAL_IFDEF, value.split(' ')[1])
+						self.directive_stack_names.append(token_value)
+						self.directive_stack_active.append(token_value in self.defined_names and self.directive_stack_active[-1])
 						previous_token_type = TokenType.ENDOFLINE # @hack
 						continue
-				elif kind == 'INTERNAL_RAW':
-					token_type, token_value = (TokenType.INTERNAL_RAW, value.split(' ')[1])
-					print(F'Parsing #raw with bytes `{token_value}`')
 
-				elif kind == 'INTERNAL_DEFINE':
-					token_type, token_value = (TokenType.INTERNAL_DEFINE, value.split(' ')[1])
-					self.defined_names.append(token_value)
-					continue
+					elif kind == 'INTERNAL_IFNDEF':
+						token_type, token_value = (TokenType.INTERNAL_IFNDEF, value.split(' ')[1])
+						self.directive_stack_names.append(token_value)
+						self.directive_stack_active.append(token_value not in self.defined_names and self.directive_stack_active[-1])
+						previous_token_type = TokenType.ENDOFLINE # @hack
+						continue
 
-				elif kind == 'INTERNAL_IFDEF':
-					token_type, token_value = (TokenType.INTERNAL_IFDEF, value.split(' ')[1])
-					self.directive_stack_names.append(token_value)
-					self.directive_stack_active.append(token_value in self.defined_names and self.directive_stack_active[-1])
-					previous_token_type = TokenType.ENDOFLINE # @hack
-					continue
+					elif kind == 'INTERNAL_ELSEDEF':
+						if not self.directive_stack_active or not self.directive_stack_names:
+							print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+							raise errors.KeywordMismatchError('Unexpected `#else` keyword without matching `#ifdef`...')
+						token_type, token_value = (TokenType.INTERNAL_ELSEDEF, self.directive_stack_names[-1])
+						if self.directive_stack_active[-2]: # Check the second last item for the outer context's state
+							self.directive_stack_active[-1] = not self.directive_stack_active[-1]
+						previous_token_type = TokenType.ENDOFLINE # @hack
+						continue
 
-				elif kind == 'INTERNAL_IFNDEF':
-					token_type, token_value = (TokenType.INTERNAL_IFNDEF, value.split(' ')[1])
-					self.directive_stack_names.append(token_value)
-					self.directive_stack_active.append(token_value not in self.defined_names and self.directive_stack_active[-1])
-					previous_token_type = TokenType.ENDOFLINE # @hack
-					continue
+					elif kind == 'INTERNAL_ENDIFDEF':
+						if not self.directive_stack_active or not self.directive_stack_names:
+							print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+							raise errors.KeywordMismatchError('Unexpected `#endif` keyword without matching `#ifdef`...')
+						self.directive_stack_active.pop()
+						token_type, token_value = (TokenType.INTERNAL_ENDIFDEF, self.directive_stack_names.pop())
+						previous_token_type = TokenType.ENDOFLINE # @hack
+						continue
 
-				elif kind == 'INTERNAL_ELSEDEF':
-					if not self.directive_stack_active or not self.directive_stack_names:
+					elif kind == 'INTERNAL_GOTO':
+						token_type, token_value = (TokenType.INTERNAL_GOTO, value.split(' ')[1])
+					elif kind == 'INTERNAL_LABEL':
+						token_type, token_value = (TokenType.INTERNAL_LABEL, value.split(':')[0])
+
+					elif kind == 'INTERNAL_STRCHECKSUM':
+						value = strip_hash_string_stuff(value)
+						token_type, token_value = (TokenType.NAME, (value, None))
+					elif kind == 'INTERNAL_HEXCHECKSUM':
+						value = strip_hash_string_stuff(value)
+						token_type, token_value = (TokenType.NAME, (None, int(value, 0)))
+
+					elif kind == 'INTERNAL_ARGUMENTSTRCHECKSUM':
+						value = strip_hash_string_stuff(strip_argument_string_stuff(value))
+						token_type, token_value = (TokenType.ARGUMENT, (value, None))
+					elif kind == 'INTERNAL_ARGUMENTHEXCHECKSUM':
+						value = strip_hash_string_stuff(strip_argument_string_stuff(value))
+						token_type, token_value = (TokenType.ARGUMENT, (None, int(value, 0)))
+
+					elif kind == 'ARGUMENT':
+						value = strip_argument_string_stuff(value)
+						token_type, token_value = (TokenType.ARGUMENT, (value, None))
+					elif kind == 'ALLARGS':
+						token_type, token_value = (TokenType.ALLARGS, None)
+
+					elif kind in ('INTERNAL_COMMENTINLINE', 'WHITESPACE', 'MISMATCH'):
+						if kind == 'MISMATCH':
+							print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+							raise NotImplementedError(f'Unexpected token `{value}` at line {index}....')
+						continue # Skip spaces, newlines, and mismatches
+
+					if token_type is TokenType.KEYWORD_UNDEFINED:
 						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-						raise errors.KeywordMismatchError('Unexpected `#else` keyword without matching `#ifdef`...')
-					token_type, token_value = (TokenType.INTERNAL_ELSEDEF, self.directive_stack_names[-1])
-					if self.directive_stack_active[-2]: # Check the second last item for the outer context's state
-						self.directive_stack_active[-1] = not self.directive_stack_active[-1]
-					previous_token_type = TokenType.ENDOFLINE # @hack
-					continue
+						raise NotImplementedError(f'The lexer token `{kind}` has not been handled properly...')
 
-				elif kind == 'INTERNAL_ENDIFDEF':
-					if not self.directive_stack_active or not self.directive_stack_names:
-						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-						raise errors.KeywordMismatchError('Unexpected `#endif` keyword without matching `#ifdef`...')
-					self.directive_stack_active.pop()
-					token_type, token_value = (TokenType.INTERNAL_ENDIFDEF, self.directive_stack_names.pop())
-					previous_token_type = TokenType.ENDOFLINE # @hack
-					continue
+					previous_token_type = token_type
 
-				elif kind == 'INTERNAL_GOTO':
-					token_type, token_value = (TokenType.INTERNAL_GOTO, value.split(' ')[1])
-				elif kind == 'INTERNAL_LABEL':
-					token_type, token_value = (TokenType.INTERNAL_LABEL, value.split(':')[0])
+					yield {
+						'type': token_type,
+						'value': token_value,
+						'index': index,
+						'source': stripped_line,
+						'start': mo.start(),
+						'end': mo.end(),
+					}
 
-				elif kind == 'INTERNAL_STRCHECKSUM':
-					value = strip_hash_string_stuff(value)
-					token_type, token_value = (TokenType.NAME, (value, None))
-				elif kind == 'INTERNAL_HEXCHECKSUM':
-					value = strip_hash_string_stuff(value)
-					token_type, token_value = (TokenType.NAME, (None, int(value, 0)))
-
-				elif kind == 'INTERNAL_ARGUMENTSTRCHECKSUM':
-					value = strip_hash_string_stuff(strip_argument_string_stuff(value))
-					token_type, token_value = (TokenType.ARGUMENT, (value, None))
-				elif kind == 'INTERNAL_ARGUMENTHEXCHECKSUM':
-					value = strip_hash_string_stuff(strip_argument_string_stuff(value))
-					token_type, token_value = (TokenType.ARGUMENT, (None, int(value, 0)))
-
-				elif kind == 'ARGUMENT':
-					value = strip_argument_string_stuff(value)
-					token_type, token_value = (TokenType.ARGUMENT, (value, None))
-				elif kind == 'ALLARGS':
-					token_type, token_value = (TokenType.ALLARGS, None)
-
-				elif kind in ('INTERNAL_COMMENTINLINE', 'WHITESPACE', 'MISMATCH'):
-					if kind == 'MISMATCH':
-						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-						raise NotImplementedError(f'Unexpected token `{value}` at line {index}....')
-					continue # Skip spaces, newlines, and mismatches
-
-				if token_type is TokenType.KEYWORD_UNDEFINED:
-					print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-					raise NotImplementedError(f'The lexer token `{kind}` has not been handled properly...')
-
-				previous_token_type = token_type
-
-				yield {
-					'type': token_type,
-					'value': token_value,
-					'index': index,
-					'source': stripped_line,
-					'start': mo.start(),
-					'end': mo.end(),
-				}
-			
 			# don't add a new line token if any of the following tokens was the previous one... 
 			if previous_token_type not in (TokenType.ENDOFLINE, TokenType.INTERNAL_INCLUDE):
 				previous_token_type = TokenType.ENDOFLINE
@@ -1006,7 +1007,8 @@ class QB:
 				checksum, name = resolve_checksum_tuple(current_token['value'])
 				writer.write_uint32(checksum)
 				if name:
-					self.checksums[checksum] = name
+					if not self.checksums.get(checksum):
+						self.checksums[checksum] = name
 
 			elif current_token_type is TokenType.ALLARGS:
 				writer.write_uint8(TokenType.ALLARGS.value)
@@ -1016,7 +1018,8 @@ class QB:
 				checksum, name = resolve_checksum_tuple(current_token['value'])
 				writer.write_uint32(checksum)
 				if name:
-					self.checksums[checksum] = name
+					if not self.checksums.get(checksum):
+						self.checksums[checksum] = name
 
 			elif current_token_type is TokenType.INTEGER:
 				writer.write_uint8(TokenType.INTEGER.value)
@@ -1144,6 +1147,7 @@ class QB:
 	
 		# ---- write end of file ------------------------------------------------------------------
 		writer.write_uint8(TokenType.ENDOFFILE.value)
+		writer.write_uint8(TokenType.ENDOFFILE.value) # ehh
 
 		# ---- debugging --------------------------------------------------------------------------
 		if debug:
