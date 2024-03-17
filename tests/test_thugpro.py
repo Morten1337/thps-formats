@@ -1,16 +1,10 @@
 import os
-import pytest
-import difflib
-import hashlib
+#import difflib
+#import hashlib
 from pathlib import Path
 from thps_formats.utils.reader import BinaryReader
-from thps_formats.scripting2.enums import TokenType
 from thps_formats.scripting2.qb import QB
 from thps_formats.shared.enums import GameVersion
-
-# @todo: ignore whitespace differences
-# - starting with ENDOFLINE token,
-# - additional ENDOFFILE tokens before and after debug table 
 
 
 # ------------------------------------------------------------------------------
@@ -76,92 +70,12 @@ def find_diff_chunk(new, ref):
 	chunksref = get_file_chunks(ref)
 	for a, b in zip(chunksnew, chunksref):
 		difference, diffnew, diffref = print_colored_hex_diff(a.hex(), b.hex())
-		print(F"{new.name} {fileoffset:#010x} | {diffnew} # new")
-		print(F"{ref.name} {fileoffset:#010x} | {diffref} # reference")
 		if difference is True:
+			print(F"{new.name} {fileoffset:#010x} | {diffnew} # new")
+			print(F"{ref.name} {fileoffset:#010x} | {diffref} # reference")
 			break
 		fileoffset += 16
 	return difference
-
-
-# ------------------------------------------------------------------------------
-def check_first_byte(a):
-	with open(a, 'rb') as inp:
-		br = BinaryReader(inp)
-		br.seek(0, os.SEEK_SET)
-		current = br.read_byte()
-		return current is TokenType.ENDOFLINE.value
-
-
-# ------------------------------------------------------------------------------
-def find_byte_range(a):
-
-	start = 0
-	end = 0
-	end = 0
-
-	with open(a, 'rb') as inp:
-		br = BinaryReader(inp)
-		br.seek(0, os.SEEK_END)
-		end = br.stream.tell()
-		br.seek(0, os.SEEK_SET)
-
-		current = br.read_byte()
-		#if current is not TokenType.ENDOFLINE.value:
-		#	br.seek(0, os.SEEK_SET)
-		#start = br.stream.tell()
-
-		while br.stream.tell() != end and (current := br.read_byte()) is not TokenType.CHECKSUM_NAME.value:
-			if current in (
-				TokenType.ENDOFLINENUMBER.value,
-				TokenType.NAME.value,
-				TokenType.INTEGER.value,
-				TokenType.FLOAT.value,
-			):
-				br.stream.seek(4, os.SEEK_CUR)
-
-			elif current in (TokenType.STRING.value, TokenType.LOCALSTRING.value):
-				length = br.read_uint32()
-				br.stream.seek(length, os.SEEK_CUR)
-
-			elif current is TokenType.PAIR.value:
-				br.stream.seek(8, os.SEEK_CUR)
-
-			elif current is TokenType.VECTOR.value:
-				br.stream.seek(12, os.SEEK_CUR)
-
-			elif current in (
-				TokenType.KEYWORD_IF2.value,
-				TokenType.KEYWORD_ELSE2.value,
-				TokenType.KEYWORD_SHORTJUMP.value
-			):
-				length = br.read_uint16()
-				br.stream.seek(length, os.SEEK_CUR)
-			else:
-				pass
-
-		br.stream.seek(-3, os.SEEK_CUR)
-		end = br.stream.tell()
-		return (start, end)
-
-
-# ------------------------------------------------------------------------------
-def calculate_byte_diff(a, b):
-	return difflib.diff_bytes(difflib.ndiff, a.read_bytes(), b.read_bytes())
-
-
-# ------------------------------------------------------------------------------
-def calculate_byte_hash(a, b):
-	hasha = hashlib.sha256(a.read_bytes()).hexdigest()
-	hashb = hashlib.sha256(b.read_bytes()).hexdigest()
-	return (hasha == hashb, hasha, hashb)
-
-
-# ------------------------------------------------------------------------------
-def calculate_byte_hash2(a, b):
-	hasha = hashlib.sha256(a).hexdigest()
-	hashb = hashlib.sha256(b).hexdigest()
-	return (hasha == hashb, hasha, hashb)
 
 
 # ------------------------------------------------------------------------------
@@ -186,8 +100,18 @@ defines = [
 sourcepath = Path('./tests/data/thugpro/source/code/qb').resolve()
 outputpath = Path('./tests/data/thugpro/output/data/qb').resolve()
 fileoffset = 0
-filelimit = 19
-skipfiles = ['tod_manager.qb']
+filelimit = 300
+
+skipfiles = [
+	# include directives omits newline tokens in qconsole
+	'tod_manager.qb', 'thugpro_levelselect.qb',
+	# text encoding issues in qconsole with char `œ` `0x9C`
+	'keyboard.qb', 'net.qb',
+	# qconsole parses `!` as a name `if ! InVertAir`
+	'ksk_tricks.qb',
+	# qcompy does not handle #raw bytes yet 
+	'thug_pro_dev_menu.qb',
+]
 
 
 # ------------------------------------------------------------------------------
@@ -235,43 +159,25 @@ def test_compile():
 
 # ------------------------------------------------------------------------------
 def test_difference():
+	skipped = 0
+	thesame = 0
+	filecnt = 0
 	for index, sourcefile in enumerate(sourcepath.rglob('*.qb')):
 		if index < fileoffset:
 			continue
 		if index > filelimit:
 			break
 		if sourcefile.name in skipfiles:
+			skipped += 1
 			continue
 		if sourcefile.is_file():
+			filecnt += 1
 			# output file is `new`, sourcefile is `ref`
 			outputfile = outputpath / sourcefile.relative_to(sourcepath)
 			difference = find_diff_chunk(outputfile, sourcefile)
 			assert difference is False
-
-
-# # ------------------------------------------------------------------------------
-# def test_thugpro2():
-# 	for sourcefile in sourcepath.rglob('*.qb'):
-# 		if sourcefile.is_file():
-# 			outputfile = outputpath / sourcefile.relative_to(sourcepath)
-# 			print(sourcefile)
-# 			same, _, _ = calculate_byte_hash(sourcefile, outputfile)
-# 			#a, b = find_byte_range(sourcefile)
-# 			#x, y = find_byte_range(outputfile)
-# 			#same, _, _ = calculate_byte_hash2(sourcefile.read_bytes()[a:b], outputfile.read_bytes()[x:y])
-# 			assert same
-
-# ------------------------------------------------------------------------------
-# def test_thugpro():
-# 	sourcepath = Path('./tests/data/thugpro/source/code/qb').resolve()
-# 	outputpath = Path('./tests/data/thugpro/output/code/qb').resolve()
-# 	for sourcefile in sourcepath.rglob('*.qb'):
-# 		if sourcefile.is_file():
-# 			outputfile = outputpath / sourcefile.relative_to(sourcepath)
-# 			print(sourcefile)
-# 			#yes = check_first_byte(outputfile)
-# 			#print(yes)
-# 			a, b = find_byte_range(sourcefile)
-# 			x, y = find_byte_range(outputfile)
-# 			check = calculate_byte_hash2(sourcefile.read_bytes()[a:b], outputfile.read_bytes()[x:y])
-# 			print(check)
+			thesame += 1
+	print('------------------------------------------------------------')
+	print(F"Files:   {filecnt}")
+	print(F"Equal:   {thesame}")
+	print(F"Skipped: {skipped}")

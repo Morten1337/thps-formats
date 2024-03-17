@@ -16,16 +16,22 @@ params = {
 }
 
 
-def test_thugpro():
-	sourcepath = Path('d:/repos/thugpro/source/code/qb').resolve()
-	outputpath = Path('./tests/data/qb').resolve()
-	for sourcefile in sourcepath.rglob('*.q'):
-		if sourcefile.is_file():
-			outputfile = outputpath / sourcefile.relative_to(sourcepath).with_suffix('.qb')
-			outputfile.parent.mkdir(exist_ok=True, parents=True)
-			qb = QB.from_file(sourcefile, params, defines)
-			assert qb is not None
-			assert qb.to_file(outputfile, params)
+# def test_thugpro():
+# 	sourcepath = Path('d:/repos/thugpro/source/code/qb').resolve()
+# 	outputpath = Path('./tests/data/qb').resolve()
+# 	for sourcefile in sourcepath.rglob('*.q'):
+# 		if sourcefile.is_file():
+# 			outputfile = outputpath / sourcefile.relative_to(sourcepath).with_suffix('.qb')
+# 			outputfile.parent.mkdir(exist_ok=True, parents=True)
+# 			qb = QB.from_file(sourcefile, params, defines)
+# 			assert qb is not None
+# 			assert qb.to_file(outputfile, params)
+
+
+# def test_strings():
+# 	qb = QB.from_file('./tests/data/strings.q', params, defines)
+# 	assert qb is not None
+# 	assert qb.to_console()
 
 #def test_qb():
 #	qb = QB.from_file('./tests/data/Example.q', params, defines)
@@ -59,6 +65,41 @@ def test_thugpro():
 # 	endscript
 # 	""", params)
 # 	assert qb is not None
+# 	assert qb.to_console()
+
+
+def test_ksktricks():
+	qb = QB.from_string("""
+	script ToTail 
+		if ! InVertAir 
+			RestoreEvents UsedBy = Regular Duration = 200 
+			Goto Airborne 
+		endif 
+	endscript
+	""", params)
+	assert qb is not None
+	print(qb.tokens)
+	assert qb.to_console()
+
+
+# def test_dotvector():
+# 	qb = QB.from_string("""
+# 		// this is a vector!
+# 		(.7,.7,.7)
+# 	""", params)
+# 	assert qb is not None
+# 	print(qb.tokens)
+# 	assert qb.to_console()
+
+
+# def test_paddedvector():
+# 	qb = QB.from_string("""
+# 		// this is a vector!
+# 		moment_of_inertia = ( 6000000, 5000000, 6000000 )
+# 		skater_pos = ( 0, 0, 0 )
+# 	""", params)
+# 	assert qb is not None
+# 	print(qb.tokens)
 # 	assert qb.to_console()
 
 # def test_nested_ifdefs2():

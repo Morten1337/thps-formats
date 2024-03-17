@@ -121,7 +121,7 @@ script TRG_BA_Pigeon03Script
 	<TempVec3> = (3.14159298, -0.75049102,3)
 	<TempVec2> = (0.00000000, 1.00000000)
 //	<TempVec4> = (0.00000000, 1.00000000, 5.00000000, 3.00000000)
-//	<TempInvalid> = (1.-9999999,.3,.4)
+//	<TempInvalid> = (1.-9999999,.3,.4) ; this is a bad vector! tokenized to `( float int comma float comma float )`
 endscript
 
 array_with_commas = [0,1,2,3,4,5,6,7,8]

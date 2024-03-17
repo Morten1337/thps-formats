@@ -31,10 +31,6 @@ def parse_build_file(inputpath):
             if not cleaned_line:
                 continue
             filename = Path(cleaned_line).resolve()
-            #filename = (Path().cwd().absolute() / Path(cleaned_line)).resolve()
-            #print('cleaned_line', cleaned_line)
-            #print('filename', filename)
-            #print('eh', (Path().cwd().absolute() / Path(cleaned_line)))
             if not filename.is_file():
                 raise Exception(F"Couldn't find the file with name! {filename}")
             files.append(filename)
@@ -86,7 +82,6 @@ def prepack(args):
         writer.write_uint32(len(files)) # number of files
 
         for file in files:
-            filesize = os.path.getsize(file)
             print(F"[{outputfile.name}] adding file '{file}'")
 
             if args.thugpro:
@@ -99,6 +94,7 @@ def prepack(args):
             if remainder != 4:
                 paddedpath = paddedpath + '\x00' * remainder
 
+            filesize = os.path.getsize(file)
             with open(file, 'rb') as inp:
                 data = inp.read()
                 if args.compress:
