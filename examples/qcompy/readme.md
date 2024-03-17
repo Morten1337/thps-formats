@@ -1,11 +1,13 @@
-# qcomp
+# qcompy
 
 ## description
 a sample q compiler using the `thps_formats` library
 
 ## usage
 ```sh
-$ qcomp -c filename.q --debug
+$ qcompy filename.q
+$ qcompy path/ --recursive --output output/
+$ qcompy filename.q --defines DEVLOPER,FOO --debug
 ```
 
 ## build

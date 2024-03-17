@@ -16,7 +16,7 @@ import thps_formats.scripting2.errors as errors
 from thps_formats.scripting2.errors import (print_token_error_message,highlight_error_with_indicator)
 
 # @warn: probably shouldnt have this here...
-colorama.init(autoreset=True)
+colorama.init(autoreset=False)
 
 # --- todo ----------------------------------------------------------------------------------------
 # - tokenizer->lexer->compiler
@@ -413,10 +413,8 @@ class QTokenIterator:
 			length_of_line = len(stripped_line)
 
 			# skip empty lines...
-			if not stripped_line:
-				previous_token_type = None
+			if stripped_line:
 
-			else:
 				for mo in re.finditer(self.tok_regex, stripped_line, flags=re.IGNORECASE):
 
 					kind, value = mo.lastgroup, mo.group()
@@ -458,6 +456,7 @@ class QTokenIterator:
 						token_type, token_value = (TokenType.HEXINTEGER, int(value, 0))
 
 					elif kind == 'STRING':
+						print('--- got string', value)
 						if value[0] == '\"':
 							token_type, token_value = (TokenType.STRING, str(value[1:-1]))
 						else:
@@ -494,6 +493,7 @@ class QTokenIterator:
 					elif kind == 'INTERNAL_DEFINE':
 						token_type, token_value = (TokenType.INTERNAL_DEFINE, value.split(' ')[1])
 						self.defined_names.append(token_value)
+						previous_token_type = TokenType.ENDOFLINE # @hack
 						continue
 
 					elif kind == 'INTERNAL_IFDEF':
@@ -575,6 +575,20 @@ class QTokenIterator:
 						'end': mo.end(),
 					}
 
+				else:
+
+					# maybe add a newline token for empty lines
+					if previous_token_type not in (TokenType.ENDOFLINE, TokenType.INTERNAL_INCLUDE):
+						previous_token_type = TokenType.ENDOFLINE
+						yield {
+							'type': TokenType.ENDOFLINE,
+							'value': index,
+							'index': index,
+							'source': stripped_line,
+							'start': length_of_line,
+							'end': length_of_line + 1,
+						}
+
 			# don't add a new line token if any of the following tokens was the previous one... 
 			if previous_token_type not in (TokenType.ENDOFLINE, TokenType.INTERNAL_INCLUDE):
 				previous_token_type = TokenType.ENDOFLINE
@@ -625,7 +639,6 @@ class QB:
 			raise NotImplementedError('Loading QB scripts is not supported yet...')
 		elif extension == 'q':
 			try:
-				print('Compiling q script from file...', filename)
 				source = LineIterator(pathname)
 				qb.compile(source)
 			except Exception as exeption:
@@ -638,7 +651,6 @@ class QB:
 	def from_string(cls, string, params={}, defines=[]):
 		qb = cls(params, defines) # oaky
 		try:
-			print('Compiling q script from string...')
 			source = StringLineIterator(string)
 			qb.compile(source)
 		except Exception as exeption:
@@ -711,6 +723,10 @@ class QB:
 	
 			# handle inclusion of other q files
 			if token['type'] is TokenType.INTERNAL_INCLUDE:
+				if 'PYTEST_CURRENT_TEST' in os.environ:
+					print(F"modifying include path '{token['value']}")
+					token['value'] = token['value'].replace("..\\thugpro", "tests\\data\\thugpro")
+
 				includepath = Path(token['value']).resolve()
 				if includepath.is_file():
 					print(F'Including file "{includepath}"')

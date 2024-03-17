@@ -26,27 +26,63 @@ def test_thugpro():
 			qb = QB.from_file(sourcefile, params, defines)
 			assert qb is not None
 			assert qb.to_file(outputfile, params)
-#def test_randomvector():
-#	qb = QB.from_string("""
-#	script RandomVectorTest
-#		// this is not a vector!
-#		text = Random(@"You got shafted" @"Who built that?!" @"Serve, set, spike!" @"Shish kabob?" @"Don't build this at home!")
-#		// this is a vector!
-#		vector3 = (3.14159298, -0.75049102,3)
-#		vector2 = (0.00000000, 1.00000000)
-#		// this is a random range keyword!
-#		range = RandomRange(0.1,3.0)
-#		// this is a bad vector!
-#		invalid = (1.-9999999,.3,.4)
-#	endscript
-#	""", params)
-#	assert qb is not None
-#	assert qb.to_console()
 
 #def test_qb():
 #	qb = QB.from_file('./tests/data/Example.q', params, defines)
 #	assert qb is not None
 #	assert qb.to_file('./tests/data/Example.qb', params)
+#	assert qb.to_console()
+
+#def test_qb2():
+#	qb = QB.from_file('D:/Repos/thugpro/source/code/qb/thugpro/thugpro_leveleditor.q', params, defines)
+#	assert qb is not None
+#	assert qb.to_file('./tests/data/qb/thugpro/thugpro_leveleditor.qb', params)
+#	assert qb.to_console()
+
+# def test_randomvector():
+# 	qb = QB.from_string("""
+# 	script RandomVectorTest
+# 		// this is not a vector!
+# 		text = Random(@"You got shafted" @"Who built that?!" @"Serve, set, spike!" @"Shish kabob?" @"Don't build this at home!")
+# 		// this is a vector!
+# 		vector3 = (3.14159298, -0.75049102,3)
+# 		vector2 = (0.00000000, 1.00000000)
+# 		//vector4 = (0.00000000, 1.00000000, 2.00000000, 3.00000000)
+# 		// this is a random range keyword!
+# 		range = RandomRange(0.1,3.0)
+# 		// not a vector
+# 		scale = (2)
+# 		// also not a vector
+# 		command = (<cmd_params_str> = ",")
+# 		// this is a bad vector! tokenized to `( float int comma float comma float )`
+# 		invalid = (1.-9999999,.3,.4)
+# 	endscript
+# 	""", params)
+# 	assert qb is not None
+# 	assert qb.to_console()
+
+# def test_nested_ifdefs2():
+# 	qb = QB.from_string("""
+# 	//#define FOO
+# 	#define BAR
+# 	#ifdef FOO
+# 		foo = "foo undefined"
+# 		#ifdef BAR
+# 			bar = "bar defined"
+# 			#ifdef BAZ
+# 				baz = "baz defined"
+# 			#else
+# 				baz = "baz undefined"
+# 			#endif
+# 		#else
+# 			bar = "bar undefined"
+# 		#endif
+# 	#else
+# 		foo = "foo defined"
+# 	#endif
+# 	""", params)
+# 	assert qb is not None
+# 	assert qb.to_console()
 
 # def test_switch():
 # 	qb = QB.from_string("""

@@ -164,3 +164,5 @@ cython_debug/
 
 # test data
 tests/data/qb
+tests/data/thugpro/source
+tests/data/thugpro/output

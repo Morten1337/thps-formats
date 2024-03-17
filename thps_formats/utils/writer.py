@@ -71,11 +71,11 @@ class BinaryWriter(object):
 		return self.pack(f'{endian}Q', value)
 
 	def write_string(self, value, encoding='utf-8'):
-		if type(value) is str:
+		if isinstance(value, str):
 			value = value.encode(encoding)
 		self.write_bytes(binascii.hexlify(bytearray(value)).decode(encoding))
 
 	def write_character(self, value, encoding='utf-8'):
-		if type(value) is str:
+		if isinstance(value, str):
 			value = value.encode(encoding)
 		self.write_bytes(binascii.hexlify(bytearray(value)).decode(encoding))
