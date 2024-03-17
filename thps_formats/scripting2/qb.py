@@ -56,6 +56,15 @@ def strip_argument_string_stuff(value):
 
 
 # -------------------------------------------------------------------------------------------------
+def handle_string_stuff(value):
+	if value[0] == '"':
+		token = TokenType.STRING
+	else:
+		token = TokenType.LOCALSTRING
+	return token, value[1:-1].replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
+
+
+# -------------------------------------------------------------------------------------------------
 def resolve_checksum_name_tuple(value):
 
 	if value[0] is not None:
@@ -456,11 +465,7 @@ class QTokenIterator:
 						token_type, token_value = (TokenType.HEXINTEGER, int(value, 0))
 
 					elif kind == 'STRING':
-						print('--- got string', value)
-						if value[0] == '\"':
-							token_type, token_value = (TokenType.STRING, str(value[1:-1]))
-						else:
-							token_type, token_value = (TokenType.LOCALSTRING, str(value[1:-1]))
+						token_type, token_value = handle_string_stuff(value)
 
 					elif kind in QTokenIterator.token_misc_lookup_table.keys():
 						token_type, token_value = QTokenIterator.token_misc_lookup_table[kind]
@@ -1063,7 +1068,7 @@ class QB:
 			elif current_token_type in (TokenType.STRING, TokenType.LOCALSTRING):
 				writer.write_uint8(current_token_type.value)
 				writer.write_uint32(len(current_token['value']) + 1)
-				writer.write_string(current_token['value'])
+				writer.write_string(current_token['value'], encoding='windows-1252')
 				writer.write_uint8(0)
 
 			elif current_token_type in (TokenType.KEYWORD_RANDOMRANGE, TokenType.KEYWORD_RANDOMRANGE2):
