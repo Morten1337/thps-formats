@@ -1,2 +1,2 @@
 pyinstaller
-nlzss11
+pylzss@git+https://github.com/m1stadev/pylzss@v0.3.6
