@@ -1,6 +1,8 @@
+import os
 import sys
 import argparse
 from pathlib import Path
+#sys.path.insert(0, os.path.abspath('../../'))
 from thps_formats.graphics.font import Font
 
 
@@ -14,11 +16,12 @@ def generate(args):
         raise Exception('No output file or directory specified!')
 
     inputpath = Path(args.input).resolve()
+    print(F"Generating font '{inputpath.name}'")
     font = Font.from_xml(inputpath, {})
 
     outputpath = Path(args.output).resolve()
     if outputpath.is_dir():
-        outputpath = inputpath.with_name(inputpath.name).with_suffix('.fnt.xbx')
+        outputpath = (outputpath / inputpath.name).with_suffix('.fnt.xbx')
 
     return font.to_file(outputpath, {})
 

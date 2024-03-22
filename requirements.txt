@@ -1,2 +1,4 @@
 colorama
-nlzss11
+xmltodict
+Pillow
+pypng
