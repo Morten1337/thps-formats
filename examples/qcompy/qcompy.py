@@ -1,3 +1,4 @@
+import sys
 import argparse
 from pathlib import Path
 from thps_formats.scripting2.qb import QB
@@ -96,8 +97,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     try:
         compile(args)
+        sys.exit(0)
     except Exception as e:
         print(e)
+        sys.exit(1)
 
 # $ qcompy file.q
 # $ qcompy path/ --recursive

@@ -670,7 +670,7 @@ class QB:
 	def compile(self, source):
 
 		# -----------------------------------------------------------------------------------------
-		# ìf are we debugging
+		# if are we debugging
 		debug = self.params['debug']
 		# shorthand for the end-of-line token to use in debug builds
 		token_type_eol = TokenType.ENDOFLINENUMBER if debug else TokenType.ENDOFLINE
