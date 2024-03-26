@@ -20,8 +20,6 @@ colorama.init(autoreset=False)
 
 # --- todo ----------------------------------------------------------------------------------------
 # - tokenizer->lexer->compiler
-# - token post-processing
-# 	- Jumps
 # - #raw bytes
 # - fix incorrect line numbers
 # - improve error message handling
@@ -36,7 +34,7 @@ def extract_numbers_to_tuple(value):
 	# Identify invalid segments
 	invalid_numbers = [segment for segment in segments if not (re.fullmatch(r'^-?\d*\.\d+$', segment) or re.fullmatch(r'^-?\d+$', segment)) and segment]
 	if invalid_numbers:
-		raise errors.InvalidFormatError(f'Unable to parse one or more numbers in the vector... {invalid_numbers}')
+		raise errors.InvalidFormatError(F"Unable to parse one or more numbers in the vector... {invalid_numbers}")
 	return tuple(numbers), len(numbers)
 
 
@@ -107,14 +105,16 @@ def is_token_type_random_keyword(token):
 
 # -------------------------------------------------------------------------------------------------
 def skip_random_operator(iterator):
-	parenth_count = 0
+	parenth_count = 1
 	# @todo: skip whitespace
 	next_token = next(iterator)
 	if next_token['type'] is not TokenType.OPENPARENTH:
 		raise errors.InvalidFormatError("Random keyword must be followed by an open parenthesis...")
 
 	for token in iterator:
-		if token['type'] is TokenType.ENDOFFILE:
+		if is_token_type_random_keyword(token['type']):
+			skip_random_operator(iterator)
+		elif token['type'] is TokenType.ENDOFFILE:
 			raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
 		elif token['type'] is TokenType.KEYWORD_ENDSCRIPT:
 			if parenth_count > 0:
@@ -123,12 +123,9 @@ def skip_random_operator(iterator):
 		elif token['type'] is TokenType.OPENPARENTH:
 			parenth_count += 1
 		elif token['type'] is TokenType.CLOSEPARENTH:
-			if parenth_count > 0:
-				parenth_count -= 1
-			else:
+			parenth_count -= 1
+			if parenth_count == 0:
 				break
-		elif is_token_type_random_keyword(token['type']):
-			skip_random_operator(iterator)
 
 
 # -------------------------------------------------------------------------------------------------
@@ -140,8 +137,7 @@ def get_random_operator_count(tokens):
 	for token in iterator:
 		if is_token_type_random_keyword(token['type']):
 			skip_random_operator(iterator)
-
-		if token['type'] is TokenType.ENDOFFILE:
+		elif token['type'] is TokenType.ENDOFFILE:
 			raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
 		elif token['type'] is TokenType.KEYWORD_ENDSCRIPT:
 			if parenth_count > 0:
@@ -152,9 +148,8 @@ def get_random_operator_count(tokens):
 		elif token['type'] is TokenType.OPENPARENTH:
 			parenth_count += 1
 		elif token['type'] is TokenType.CLOSEPARENTH:
-			if parenth_count > 0:
-				parenth_count -= 1
-			else:
+			parenth_count -= 1
+			if parenth_count == 0:
 				break
 	return operator_count
 
@@ -452,7 +447,7 @@ class QTokenIterator:
 							elif count == 3:
 								token_type, token_value = (TokenType.VECTOR, result)
 							else:
-								raise errors.InvalidFormatError(f'Unexpected number of elements found when parsing vector: {count} detected... {value}')
+								raise errors.InvalidFormatError(F"Unexpected number of elements found when parsing vector: {count} detected... {value}")
 						except errors.InvalidFormatError as ex:
 							print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
 							raise ex
@@ -475,7 +470,7 @@ class QTokenIterator:
 
 					elif kind == 'INTERNAL_HASHTAG':
 						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-						raise NotImplementedError(f'Unsupported hashtag `{value}` at line {index}...')
+						raise NotImplementedError(F"Unsupported hashtag `{value}` at line {index}...")
 
 					elif kind == 'INTERNAL_IDENTIFIER':
 						keyword = value.upper()
@@ -488,12 +483,12 @@ class QTokenIterator:
 						token_type, token_value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1].replace('"', ''))
 						if self.level > 0:
 							includepath = Path(token_value).resolve()
-							print(F'{Fore.YELLOW}WARNING: Only one level of file inclusion supported. Skipping "{includepath}"')
+							print(F"{Fore.YELLOW}WARNING: Only one level of file inclusion supported. Skipping '{includepath}'")
 							previous_token_type = TokenType.ENDOFLINE # @hack
 							continue
 					elif kind == 'INTERNAL_RAW':
 						token_type, token_value = (TokenType.INTERNAL_RAW, value.split(' ')[1])
-						print(F'Parsing #raw with bytes `{token_value}`')
+						print(F"Parsing #raw with bytes `{token_value}`")
 
 					elif kind == 'INTERNAL_DEFINE':
 						token_type, token_value = (TokenType.INTERNAL_DEFINE, value.split(' ')[1])
@@ -562,12 +557,12 @@ class QTokenIterator:
 					elif kind in ('INTERNAL_COMMENTINLINE', 'WHITESPACE', 'MISMATCH'):
 						if kind == 'MISMATCH':
 							print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-							raise NotImplementedError(f'Unexpected token `{value}` at line {index}....')
+							raise NotImplementedError(F"Unexpected token `{value}` at line {index}....")
 						continue # Skip spaces, newlines, and mismatches
 
 					if token_type is TokenType.KEYWORD_UNDEFINED:
 						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-						raise NotImplementedError(f'The lexer token `{kind}` has not been handled properly...')
+						raise NotImplementedError(F"The lexer token `{kind}` has not been handled properly...")
 
 					previous_token_type = token_type
 
@@ -638,7 +633,7 @@ class QB:
 		extension = pathname.suffix.lower().strip('.')
 
 		if not pathname.exists():
-			raise FileNotFoundError(f'File does not exist... {pathname}')
+			raise FileNotFoundError(F"File does not exist... '{pathname}'")
 
 		if extension == 'qb':
 			raise NotImplementedError('Loading QB scripts is not supported yet...')
@@ -730,18 +725,18 @@ class QB:
 			if token['type'] is TokenType.INTERNAL_INCLUDE:
 				if 'PYTEST_CURRENT_TEST' in os.environ:
 					print(F"modifying include path '{token['value']}")
-					token['value'] = token['value'].replace("..\\thugpro", "tests\\data\\thugpro")
+					token['value'] = token['value'].replace('..\\thugpro', 'tests\\data\\thugpro')
 
 				includepath = Path(token['value']).resolve()
 				if includepath.is_file():
-					print(F'Including file "{includepath}"')
+					print(F"Including file '{includepath}'")
 					includesource = LineIterator(includepath)
 					includeiterator = QTokenIterator(includesource, self.defines, level=1)
 					# include all the new tokens in the list! assuming the tokenizer didn't fail...
 					self.tokens.extend(includeiterator)
 				else:
 					# this is fine, as we want to include auto-generated files that may or may not exist...
-					print(F'{Fore.YELLOW}WARNING: Could not include file "{includepath}"')
+					print(F"{Fore.YELLOW}WARNING: Could not include file '{includepath}'")
 				continue # skip writing the internal include token byte to file...
 			
 			# write the normal tokens the list list
@@ -888,6 +883,7 @@ class QB:
 				if random_count > 0:
 					if (random_tracker[-1].parenth_count == parenth_count):
 						if (random_tracker[-1].current_offset != random_tracker[-1].offset_count):
+							print_token_error_message(current_token)
 							raise errors.InvalidFormatError("Unexpected close parenthesis in Random operator...")
 						# Make each of the jump commands at the end of each block jump to after the random operator.
 						current_buffer_size = writer.stream.tell()
@@ -915,7 +911,7 @@ class QB:
 			elif current_token_type in (TokenType.KEYWORD_CASE, TokenType.KEYWORD_DEFAULT):
 				if switch_count <= 0:
 					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`{current_token_type}` keyword must be used inside a switch statement...")
+					raise errors.UnexpectedScopeError(F"`{current_token_type}` keyword must be used inside a switch statement...")
 				if self.get_game_type() >= GameType.THUG2:
 					if switch_case_expected:
 						writer.write_uint8(current_token_type.value)

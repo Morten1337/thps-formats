@@ -163,15 +163,15 @@ def test_difference():
 	thesame = 0
 	filecnt = 0
 	for index, sourcefile in enumerate(sourcepath.rglob('*.qb')):
-		if index < fileoffset:
-			continue
-		if index > filelimit:
-			break
-		if sourcefile.name in skipfiles:
-			skipped += 1
-			continue
 		if sourcefile.is_file():
 			filecnt += 1
+			if index < fileoffset:
+				continue
+			if index > filelimit:
+				break
+			if sourcefile.name in skipfiles:
+				skipped += 1
+				continue
 			# output file is `new`, sourcefile is `ref`
 			outputfile = outputpath / sourcefile.relative_to(sourcepath)
 			difference = find_diff_chunk(outputfile, sourcefile)

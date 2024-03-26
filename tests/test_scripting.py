@@ -68,15 +68,43 @@ params = {
 # 	assert qb.to_console()
 
 
-def test_ksktricks():
-	qb = QB.from_string("""
-	script ToTail 
-		if ! InVertAir 
-			RestoreEvents UsedBy = Regular Duration = 200 
-			Goto Airborne 
-		endif 
-	endscript
-	""", params)
+# def test_ksktricks():
+# 	qb = QB.from_string("""
+# 	script ToTail 
+# 		if ! InVertAir 
+# 			RestoreEvents UsedBy = Regular Duration = 200 
+# 			Goto Airborne 
+# 		endif 
+# 	endscript
+# 	""", params)
+# 	assert qb is not None
+# 	print(qb.tokens)
+# 	assert qb.to_console()
+
+
+def test_random44():
+	qb = QB.from_file('./tests/data/shp_scripts.q', params, defines)
+	# qb = QB.from_string("""
+	# script BDJ_SHP_PropChunksUp
+	# 	RigidBody_Wake
+	# 	Random(@RigidBody_Kick vel = (-150.0,-100.0,1000.0) @RigidBody_Kick vel = (-150.0,-100.0,2000.0) @RigidBody_Kick vel = (-150.0,-100.0,3000.0) @RigidBody_Kick vel = (-150.0,-100.0,4000.0) @RigidBody_Kick vel = (-150.0,-200.0,1000.0) @RigidBody_Kick vel = (-150.0,-200.0,2000.0) @RigidBody_Kick vel = (-150.0,-200.0,3000.0) @RigidBody_Kick vel = (-150.0,-200.0,4000.0) @RigidBody_Kick vel = (-150.0,-300.0,1000.0) @RigidBody_Kick vel = (-150.0,-300.0,2000.0) @RigidBody_Kick vel = (-150.0,-300.0,3000.0) @RigidBody_Kick vel = (-150.0,-300.0,4000.0) @RigidBody_Kick vel = (-150.0,-400.0,1000.0) @RigidBody_Kick vel = (-150.0,-400.0,2000.0) @RigidBody_Kick vel = (-150.0,-400.0,3000.0) @RigidBody_Kick vel = (-150.0,-400.0,4000.0) @RigidBody_Kick vel = (-150.0,0.0,1000.0) @RigidBody_Kick vel = (-150.0,0.0,2000.0) @RigidBody_Kick vel = (-150.0,0.0,3000.0) @RigidBody_Kick vel = (-150.0,0.0,4000.0) @RigidBody_Kick vel = (-150.0,100.0,1000.0) @RigidBody_Kick vel = (-150.0,100.0,2000.0) @RigidBody_Kick vel = (-150.0,100.0,3000.0) @RigidBody_Kick vel = (-150.0,100.0,4000.0) @RigidBody_Kick vel = (-150.0,200.0,1000.0) @RigidBody_Kick vel = (-150.0,200.0,2000.0) @RigidBody_Kick vel = (-150.0,200.0,3000.0) @RigidBody_Kick vel = (-150.0,200.0,4000.0) @RigidBody_Kick vel = (-150.0,300.0,1000.0) @RigidBody_Kick vel = (-150.0,300.0,2000.0) @RigidBody_Kick vel = (-150.0,300.0,3000.0) @RigidBody_Kick vel = (-150.0,300.0,4000.0) @RigidBody_Kick vel = (-150.0,400.0,1000.0) @RigidBody_Kick vel = (-150.0,400.0,2000.0) @RigidBody_Kick vel = (-150.0,400.0,3000.0) @RigidBody_Kick vel = (-150.0,400.0,4000.0))
+	# endscript
+	# """, params)
+	# qb = QB.from_string("""
+	# script BDJ_SHP_PowerBoxSparks
+	# 	Obj_ClearExceptions
+	# 	Obj_SetOuterRadius 50
+	# 	//Obj_SetException Ex = SkaterOutOfRadius Scr = BDJ_SHP_PowerBoxSparks_Hold
+	# 	Obj_SetException Ex = ObjectOutOfRadius Scr = BDJ_SHP_PowerBoxSparks_Hold
+	# 	while
+	# 		Random(@wait Random(@1 seconds @0.5 seconds @0.75 seconds)
+	# 		Shatter name = sfo_Sparks01 area = 6.25 variance = 1 vel_x = 25 vel_y = 10 vel_z = 0 spread = 0.1
+	# 		Obj_PlaySound SK6_BE_ElectricShock01 @wait Random(@1 seconds @0.5 seconds @0.75 seconds)
+	# 		Shatter name = sfo_Sparks01 area = 6.25 variance = 1 vel_x = 25 vel_y = 10 vel_z = 0 spread = 0.1
+	# 		Obj_PlaySound SK6_BE_ElectricShock01 @wait Random(@1.5 seconds @1.75 seconds @2 seconds))
+	# 	repeat
+	# endscript
+	# """, params)
 	assert qb is not None
 	print(qb.tokens)
 	assert qb.to_console()
