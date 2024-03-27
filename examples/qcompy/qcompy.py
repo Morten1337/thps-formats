@@ -74,7 +74,7 @@ def compile(args):
             if inputfile.is_file():
                 outputfile = outputpath / inputfile.relative_to(inputpath).with_suffix('.qb')
                 outputfile.parent.mkdir(exist_ok=True, parents=True)
-                if args.cache:
+                if args.cache and outputfile.is_file():
                     if inputfile.stat().st_mtime > outputfile.stat().st_mtime:
                         print(F"Compiling file '{inputfile}'")
                         QB.from_file(inputfile, params, defines).to_file(outputfile, params)
