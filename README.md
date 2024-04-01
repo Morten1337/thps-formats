@@ -6,3 +6,10 @@ A Python library for working with file formats used in the Tony Hawk's Pro Skate
 ```shell
 $ python -m pytest tests/
 ```
+
+## future
+- refactor and organize the code to align more closely with the project description.
+	- define the scope and intended features of the library.
+	- design a more consistent api for format interoperability and data manipulation.
+- move example apps out of this repository.
+- set up python project system for dependency management, building, and testing.
