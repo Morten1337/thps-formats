@@ -7,6 +7,46 @@ import xmltodict
 from PIL import Image
 import png
 
+import copy
+
+# -------------------------------------------------------------------------------------------------
+def filter_chars_by_id_range(chars, min_id, max_id, exclude_id=None):
+	"""
+	Filter characters by their ID range, considering ASCII and extended ASCII codes.
+
+	Args:
+	- chars: List of characters (dictionaries) to filter.
+	- min_id: Minimum ASCII or extended ASCII code (inclusive).
+	- max_id: Maximum ASCII or extended ASCII code (inclusive).
+	- exclude_id: An ASCII code to exclude from the results.
+
+	Returns:
+	- A list of characters within the specified ASCII or extended ASCII code range.
+	"""
+	if exclude_id is not None:
+		return [c for c in chars if min_id <= int(c['@id']) <= max_id and int(c['@id']) != exclude_id]
+	else:
+		return [c for c in chars if min_id <= int(c['@id']) <= max_id]
+
+
+# -------------------------------------------------------------------------------------------------
+def remap_chars_to_lower_if_needed(chars, condition, char_range):
+	"""
+	Converts uppercase characters to lowercase if a condition is met by adding 32 to their codes.
+
+	Args:
+	- chars: The list of characters (dictionaries) to possibly modify.
+	- condition: A boolean condition that, if True, triggers the conversion.
+	- char_range: The character range (as returned by filter_chars_by_id_range) to convert.
+
+	Modifies chars in place if the condition is True, based on ASCII conversion logic.
+	"""
+	if condition:
+		for c in char_range:
+			m = copy.deepcopy(c)
+			m['@id'] = str(int(m['@id']) + 32) # Convert to lowercase by adding 32 to the ASCII code
+			chars.append(m)
+
 
 # -------------------------------------------------------------------------------------------------
 class FontBitmap:
@@ -125,27 +165,41 @@ class Font:
 		with open(xmlpath, 'rb') as file:
 			xml = xmltodict.parse(file.read())
 
-		# @todo: remap upper and lowercase chars
-
 		# parse fnt data
 		_common = xml['font']['common']
 		_chars = xml['font']['chars']['char']
-	
 		self.default_height = int(_chars[0]['@height'])
 		self.baseline_height = int(_common['@base'])
-		
+
+		# filter characters by ascii ranges for uppercase and their extended counterparts
+		uppercase_latin = filter_chars_by_id_range(_chars, 65, 90) # 'A' to 'Z'
+		uppercase_latin_ext = filter_chars_by_id_range(_chars, 192, 223) # 'À' to 'ß' with exceptions
+
+		lowercase_latin = filter_chars_by_id_range(_chars, 97, 122) # 'a' to 'z'
+		lowercase_latin_ext = filter_chars_by_id_range(_chars, 224, 1000, exclude_id=255) # 'à' to 'ÿ' excluding 'ÿ'
+
+		# check if conversion conditions are met based on character presence
+		should_remap_1 = not lowercase_latin and len(uppercase_latin) == 26
+		should_remap_2 = not lowercase_latin_ext and len(uppercase_latin_ext) == 30
+
+		# perform conversion if conditions are met
+		remap_chars_to_lower_if_needed(_chars, should_remap_1, uppercase_latin)
+		remap_chars_to_lower_if_needed(_chars, should_remap_2, uppercase_latin_ext)
+
 		# handle characters
 		for c in _chars:
 			# yoffset, character, thug2 unknown
 			self.characters.append(str(chr(int(c['@id']))))
-	
+
 		# handle dimensions
 		for c in _chars:
 			self.dimensions.append(tuple(int(c[key]) for key in ['@x', '@y', '@width', '@height']))
 
-		# handle bitmap
+		# ensure that the font only has one texture atlas...
+		# you'll have to tweak the bmfont scaling and characters to fit
 		if int(xml['font']['common']['@pages']) != 1:
 			raise NotImplementedError('We only support single bitmap fonts currently!')
 
+		# handle bitmap
 		atlaspath = xmlpath.with_name(xml['font']['pages']['page']['@file'])
 		self.bitmap = FontBitmap.from_png(atlaspath)

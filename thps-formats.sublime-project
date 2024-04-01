@@ -2,7 +2,13 @@
 	"folders":
 	[
 		{
-			"path": "."
-		}
-	]
+			"path": ".",
+		},
+		{
+			"path": "D:\\dev\\QConsole\\QbFileEx\\Encephalon\\Qode\\Utilities\\QBFile",
+		},
+		{
+			"path": "D:\\Box\\thps\\skate5\\Tools\\src\\Scripting"
+		},
+	],
 }
