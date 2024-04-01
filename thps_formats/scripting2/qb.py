@@ -20,7 +20,6 @@ colorama.init(autoreset=False)
 
 # --- todo ----------------------------------------------------------------------------------------
 # - tokenizer->lexer->compiler
-# - #raw bytes
 # - fix incorrect line numbers
 # - improve error message handling
 
@@ -489,6 +488,7 @@ class QTokenIterator:
 					elif kind == 'INTERNAL_RAW':
 						token_type, token_value = (TokenType.INTERNAL_RAW, value.split(' ')[1])
 						print(F"Parsing #raw with bytes `{token_value}`")
+						continue
 
 					elif kind == 'INTERNAL_DEFINE':
 						token_type, token_value = (TokenType.INTERNAL_DEFINE, value.split(' ')[1])
