@@ -1,7 +1,7 @@
 import sys
 import os
 import argparse
-import lzss
+import thps_formats.encoding.lzss as lzss
 from pathlib import Path
 
 from thps_formats.utils.writer import BinaryWriter
