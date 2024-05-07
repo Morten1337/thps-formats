@@ -1,0 +1,17 @@
+[project]
+name = "thps_formats"
+version = "0.1.0"
+description = "A Python library for working with file formats used in the Tony Hawk's Pro Skater game series"
+authors = [{name = "MK"}]
+license = {text = "MIT"}
+requires-python = ">=3.8"
+dependencies = [
+    "colorama",
+    "xmltodict",
+    "pillow",
+    "pypng",
+]
+
+[build-system]
+requires = ["setuptools", "wheel", "pyinstaller", "pytest"]
+build-backend = "setuptools.build_meta"

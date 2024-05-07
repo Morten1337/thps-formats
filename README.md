@@ -2,6 +2,11 @@
 
 A Python library for working with file formats used in the Tony Hawk's Pro Skater game series. It provides an essential set of tools for parsing, manipulating, and analyzing game data.
 
+## installing/building for development
+```shell
+$ python -m pip install -e .
+```
+
 ## running tests
 ```shell
 $ python -m pytest tests/
@@ -12,4 +17,3 @@ $ python -m pytest tests/
 	- define the scope and intended features of the library.
 	- design a more consistent api for format interoperability and data manipulation.
 - move example apps out of this repository.
-- set up python project system for dependency management, building, and testing.
