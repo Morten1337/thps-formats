@@ -1193,7 +1193,7 @@ class QB:
 		# resolve references, ncomps structs etc...
 		# @warn: only knows the current file scope!
 		if resolve:
-			scope.resolve_reference(scope)
+			scope.resolve_references(scope)
 
 		return scope
 
@@ -1398,7 +1398,7 @@ class QStruct(UserDict):
 		self.references[original_key] = reference_key
 
 	# ---------------------------------------------------------------------------------------------
-	def resolve_reference(self, root):
+	def resolve_references(self, root):
 		# @todo: This does not recognize hex checksum and names as the same,
 		# so `test` and `#0x278081f3` will be treated as two separate entries...
 		# @todo: Does not resolve assignment names, like profile = random_male_profile
@@ -1407,7 +1407,7 @@ class QStruct(UserDict):
 			if value is None and key in root:
 				self._add_reference(key, key)
 			elif isinstance(value, (QStruct, QArray)):
-				value.resolve_reference(root)
+				value.resolve_references(root)
 
 	# ---------------------------------------------------------------------------------------------
 	def to_json(self):
@@ -1429,13 +1429,13 @@ class QArray(UserList):
 		self.parent = parent
 
 	# ---------------------------------------------------------------------------------------------
-	def resolve_reference(self, root):
+	def resolve_references(self, root):
 		for value in self.data:
 			# if isinstance(value, QComponent):
 			# 	if value.type is ElementType.NAME and value.value is None:
 			# 		print('WARNING: Array element may be a reference?')
 			if isinstance(value, QStruct):
-				value.resolve_reference(root)
+				value.resolve_references(root)
 
 	# ---------------------------------------------------------------------------------------------
 	def to_json(self):
