@@ -8,10 +8,10 @@ params = {
 }
 
 
-# def test_nodearray():
-# 	qb = QB.from_file('./tests/data/ba.q', params, defines)
-# 	assert qb is not None
-# 	assert qb.to_json('./tests/data/ba.json')
+def test_nodearray():
+	qb = QB.from_file('./tests/data/ba.q', params, defines)
+	assert qb is not None
+	assert qb.to_json('./tests/data/ba.json')
 
 # def test_cas_skater_shared():
 # 	qb = QB.from_file('./tests/data/thugpro/source/code/qb/game/cas_skater_shared.q', params, defines)
@@ -43,17 +43,19 @@ params = {
 # 	print(test['Structure'].get('foo'))
 # 	assert qb.to_json('./tests/data/structure.json')
 
-# def test_nodearray2():
-# 	qb = QB.from_file('./tests/data/ba.q', params, defines)
-# 	assert qb is not None
-# 	baq = qb.to_struct(resolve=True)
-# 	nodearray = baq['BA_NodeArray']
-# 	for node in nodearray:
-# 		# print(node.keys())
-# 		if 'DAY_ON' in node:
-# 			print(node.get('day_on'))
-# 			print(node.get('Pos'))
-# 			print(F"-- Found node `{node['Name']}` with flag `Day_on` ")
+
+def test_nodearray2():
+	qb = QB.from_file('./tests/data/ba.q', params, defines)
+	assert qb is not None
+	baq = qb.to_struct(resolve=True)
+	nodearray = baq['BA_NodeArray']
+	for node in nodearray:
+		# print(node.keys())
+		if 'DAY_ON' in node:
+			print(node.get_value('day_on'))
+			print(node.get_value('Pos'))
+			print(F"-- Found node `{node['Name']}` with flag `Day_on` ")
+
 
 node_name_patterns_morning = [
 	'MORNINGON_',
@@ -105,16 +107,16 @@ node_name_patterns_night = [
 def _handle_tod_on_flag(node, flagname):
 	if flagname in node:
 		# None is also valid, because in thug1 this can be a flag...
-		return str(node.get(flagname)).upper() in ['NONE', '1', 'TRUE']
+		return node.get_value(flagname).upper() in ['NONE', '1', 'TRUE']
 
 
 def _handle_default_object(node):
 	if 'CreatedAtStart' in node:
 		return True
 	elif 'CreatedFromVariable' in node:
-		if int(node.root.get(str(node.get('CreatedFromVariable')), 0)) > 0:
+		if node.root.get_value(node.get_value('CreatedFromVariable'), 0) > 0:
 			return True
-	elif int(node.get('Brightness', 0)) > 0:
+	elif node.get_value('Brightness', 0) > 0:
 		return True
 	else:
 		return False
@@ -140,10 +142,11 @@ def test_todscripts():
 
 		if 'Name' not in node:
 			raise ValueError('Node has no name!', node)
-		all_objects.add(node.get('Name')) # @debug
 
-		node_name = str(node.get('Name'))
-		created_from_tod = str(node.get('CreatedFromTOD', ''))
+		node_name = node.get_value('Name')
+		created_from_tod = node.get_value('CreatedFromTOD', '')
+
+		all_objects.add(node_name) # @debug
 
 		if 'IgnoreTOD' in node:
 			print(F"Skipping node with `IgnoreTOD` flag `{node_name}`!")
