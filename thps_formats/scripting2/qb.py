@@ -1331,10 +1331,20 @@ class QStruct(UserDict):
 			raise KeyError(key)
 		return value
 
+	# ---------------------------------------------------------------------------------------------
 	def get(self, key, default=None):
 		# for getting values with s.get(keyname)
 		value = self._get_value(key)
 		return default if value == 'NOTFOUND' else value
+
+	# ---------------------------------------------------------------------------------------------
+	def get_value(self, key, default=None):
+		# for getting values that may be QComponent's
+		value = self._get_value(key)
+		value = default if value == 'NOTFOUND' else value
+		if isinstance(value, QComponent):
+			return value.value
+		return value
 
 	# ---------------------------------------------------------------------------------------------
 	def __contains__(self, key):
