@@ -88,8 +88,10 @@ def is_token_type_primitive(token):
 	return token in (
 		TokenType.NAME,
 		TokenType.INTEGER,
+		TokenType.HEXINTEGER,
 		TokenType.FLOAT,
 		TokenType.PAIR,
 		TokenType.VECTOR,
 		TokenType.STRING,
+		TokenType.LOCALSTRING,
 	)

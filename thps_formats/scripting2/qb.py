@@ -2,6 +2,7 @@ import os
 import io
 import re
 import json
+from collections import UserDict, UserList
 
 from colorama import Fore, Back, Style
 import colorama
@@ -1216,11 +1217,64 @@ class QComponent:
 		self.value = _value
 		self.type = _type
 
+	def __int__(self):
+		if self.type is not ElementType.INTEGER:
+			raise ValueError('QComponent must be INTEGER type!')
+		return int(self.value)
+
+	def __float__(self):
+		if self.type is not ElementType.INTEGER:
+			raise ValueError('QComponent must be FLOAT type!')
+		return float(self.value)
+
+	def __str__(self):
+		return str(self.value)
+
+	def __repr__(self):
+		if self.type is ElementType.INTEGER:
+			return int(self.value)
+		elif self.type is ElementType.FLOAT:
+			return float(self.value)
+		elif self.type is ElementType.NAME:
+			return F"#{self.value}"
+		elif self.type is ElementType.VECTOR:
+			return F"({self.value[0]:.8f},{self.value[1]:.8f},{self.value[2]:.8f})"
+		elif self.type is ElementType.PAIR:
+			return F"({self.value[0]:.8f},{self.value[1]:.8f})"
+		elif self.type is ElementType.QSCRIPT:
+			return "<SCRIPT>"
+		else:
+			return str(self.value)
+
+	def __hash__(self):
+		return id(self)
+
+	def __eq__(self, other):
+		if isinstance(other, QComponent):
+			return self.value == other.value
+		return self.value == other
+
+	def __ne__(self, other):
+		return not self.__eq__(other)
+
+	def __lt__(self, other):
+		if isinstance(other, QComponent):
+			other = other.value
+		return self.value < other
+
+	def __le__(self, other):
+		return self.value <= other
+
+	def __gt__(self, other):
+		if isinstance(other, QComponent):
+			other = other.value
+		return self.value > other
+
+	def __ge__(self, other):
+		return self.value >= other
+
 	def to_json(self):
-		return {
-			'__type': str(self.type),
-			'__value': self.value
-		}
+		return self.__repr__()
 
 	@classmethod
 	def from_token(cls, token):
@@ -1230,12 +1284,16 @@ class QComponent:
 			component = cls(qutils.resolve_checksum_name_tuple(token_value), ElementType.NAME)
 		elif token_type is TokenType.INTEGER:
 			component = cls(token_value, ElementType.INTEGER)
+		elif token_type is TokenType.HEXINTEGER:
+			component = cls(token_value, ElementType.INTEGER)
 		elif token_type is TokenType.FLOAT:
 			component = cls(token_value, ElementType.FLOAT)
 		elif token_type is TokenType.PAIR:
 			component = cls(token_value, ElementType.PAIR)
 		elif token_type is TokenType.VECTOR:
 			component = cls(token_value, ElementType.VECTOR)
+		elif token_type is TokenType.LOCALSTRING:
+			component = cls(token_value, ElementType.STRING)
 		elif token_type is TokenType.STRING:
 			component = cls(token_value, ElementType.STRING)
 		else:
@@ -1244,92 +1302,134 @@ class QComponent:
 
 
 # ---------------------------------------------------------------------------------------------
-class QStruct:
+class QStruct(UserDict):
 
 	def __init__(self, parent=None):
-		self.parent = parent
-		self.elements = {}
-		self.references = {} # eh
-
-	def __getitem__(self, key):
-		# check references first?
-		return self.elements[key]
+		super().__init__()
+		self.root = None # the root QStruct, used for looking up reference structs
+		self.parent = parent # the parent QStruct or QArray
+		self.mapping = {} # stores lowercase to original case key mapping
+		self.references = {} # stores the keys that are references to other QStructs
 
 	def __setitem__(self, key, value):
-		self.elements[key] = value
+		if isinstance(key, str):
+			lower_key = key.lower()
+			if lower_key not in self.mapping:
+				self.mapping[lower_key] = key
+			super().__setitem__(self.mapping[lower_key], value)
+		else:
+			raise KeyError("Keys must be strings")
 
-	def __iter__(self):
-		# check references also?
-		return iter(self.elements)
+	def __getitem__(self, key):
+		if isinstance(key, str):
+			lower_key = key.lower()
+			original_key = self.mapping.get(lower_key, None)
+			if original_key and original_key in self.data:
+				return super().__getitem__(original_key)
+			elif original_key and original_key in self.references:
+				return self.root[self.references[original_key]]
+		raise KeyError(key)
 
-	def resolve_refs(self, root):
-		for key in list(self.elements):
-			if isinstance(self.elements[key], QArray):
-				self.elements[key].resolve_refs(root)
-			elif self.elements[key] is None:
-				if key in root.elements.keys():
-					if isinstance(root[key], QStruct):
-						del self.elements[key] # cleanup reference name?
-						root[key].resolve_refs(root) # @warn: recursion
-						# @todo: use self.references struct instead?
-						self.elements.update(root[key].elements)
+	def __contains__(self, key):
+		lower_key = key.lower()
+		if lower_key in self.mapping:
+			return True
+		# recursively check referenced QStructs
+		for ref_key in self.references.values():
+			referenced_dict = self.root.get(ref_key, None)
+			if referenced_dict and key in referenced_dict:
+				return True
+		return False
+
+	def __delitem__(self, key):
+		lower_key = key.lower()
+		original_key = self.mapping.pop(lower_key, None)
+		if original_key:
+			super().__delitem__(original_key)
+			self.references.pop(original_key, None)
+		else:
+			raise KeyError(key)
+
+	def __hash__(self):
+		return id(self)
+
+	def keys(self):
+		return [self.mapping[k] for k in self.mapping]
+
+	def values(self):
+		return [self[self.mapping[k]] for k in self.mapping]
+
+	def items(self):
+		return [(k, self[k]) for k in self.keys()]
+
+	def pop(self, key, default=None):
+		if key in self:
+			result = self[key]
+			del self[key]
+			return result
+		return default
+
+	def get(self, key, default=None):
+		# check if any referenced qstruct contains the key
+		for ref_key in self.references.values():
+			referenced_dict = self.root.get(ref_key, None)
+			if referenced_dict and key in referenced_dict:
+				# if the key is found in the referenced dict, return its value
+				return referenced_dict.get(key)
+
+		# if not found in any references, check local data
+		lower_key = key.lower()
+		original_key = self.mapping.get(lower_key, None)
+		if original_key and original_key in self.data:
+			return self.data[original_key]
+
+		# return default if the key is neither in referenced dicts nor in local data
+		return default
 
 	def to_json(self):
 		struct = {}
-		for attr, value in self.elements.items():
+		for attr, value in self.data.items():
 			if isinstance(value, (QStruct, QArray, QComponent)):
 				struct[attr] = value.to_json()
 			else:
 				struct[attr] = value
 		return struct
 
-
-# ---------------------------------------------------------------------------------------------
-class QArray:
-
-	def __init__(self, _type=ElementType.NONE, parent=None):
-		self.parent = parent
-		self.type = _type
-		self.elements = []
-
-	def __getitem__(self, index):
-		return self.elements[index]
-
-	def __setitem__(self, index, value):
-		self.elements[index] = value
-
-	def __iter__(self):
-		return iter(self.elements)
-
-	def append(self, element):
-		self.elements.append(element)
-
-	def remove(self, element):
-		self.elements.remove(element)
-
-	def pop(self, index=-1):
-		self.elements.pop(index)
-
-	def insert(self, index, element):
-		self.elements.insert(index, element)
-
-	def clear(self):
-		self.elements.clear()
-
-	def extend(self, iterable):
-		self.elements.extend(iterable)
+	def add_reference(self, key, reference_key):
+		lower_key = key.lower()
+		original_key = self.mapping.get(lower_key, key)
+		self.references[original_key] = reference_key
 
 	def resolve_refs(self, root):
-		for value in self.elements:
+		# @todo: This does not recognize hex checksum and names as the same,
+		# so `test` and `#0x278081f3` will be treated as two separate entries...
+		# @todo: Does not resolve assignment names, like profile = random_male_profile
+		self.root = root
+		for key, value in self.items():
+			if value is None and key in root:
+				self.add_reference(key, key)
+			elif isinstance(value, (QStruct, QArray)):
+				value.resolve_refs(root)
+
+
+# ---------------------------------------------------------------------------------------------
+class QArray(UserList):
+
+	def __init__(self, data=[], parent=None):
+		super().__init__(data)
+		self.parent = parent
+
+	def resolve_refs(self, root):
+		for value in self.data:
 			# if isinstance(value, QComponent):
 			# 	if value.type is ElementType.NAME and value.value is None:
-			# 		self.elements['__ref']
+			# 		print('WARNING: Array element may be a reference?')
 			if isinstance(value, QStruct):
 				value.resolve_refs(root)
 
 	def to_json(self):
 		array = []
-		for value in self.elements:
+		for value in self.data:
 			if isinstance(value, (QStruct, QArray, QComponent)):
 				array.append(value.to_json())
 			else:
