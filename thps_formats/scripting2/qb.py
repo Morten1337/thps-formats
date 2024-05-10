@@ -1,6 +1,7 @@
 import os
 import io
 import re
+import json
 
 from colorama import Fore, Back, Style
 import colorama
@@ -9,8 +10,9 @@ from pathlib import Path as Path
 
 from thps_formats.utils.writer import BinaryWriter
 from thps_formats.shared.enums import GameType, GameVersion
-from thps_formats.scripting2.enums import TokenType
+from thps_formats.scripting2.enums import TokenType, ElementType
 from thps_formats.scripting2.crc32 import crc32_generate
+import thps_formats.scripting2.utils as qutils
 
 import thps_formats.scripting2.errors as errors
 from thps_formats.scripting2.errors import (print_token_error_message,highlight_error_with_indicator)
@@ -25,84 +27,6 @@ colorama.init(autoreset=False)
 
 
 # -------------------------------------------------------------------------------------------------
-def extract_numbers_to_tuple(value):
-	stripped_string = re.sub(r'[^\d,.-]', '', value)
-	segments = stripped_string.split(',')
-	# Use list comprehension to process segments
-	numbers = [float(segment) for segment in segments if re.fullmatch(r'^-?\d*\.\d+$', segment) or re.fullmatch(r'^-?\d+$', segment)]
-	# Identify invalid segments
-	invalid_numbers = [segment for segment in segments if not (re.fullmatch(r'^-?\d*\.\d+$', segment) or re.fullmatch(r'^-?\d+$', segment)) and segment]
-	if invalid_numbers:
-		raise errors.InvalidFormatError(F"Unable to parse one or more numbers in the vector... {invalid_numbers}")
-	return tuple(numbers), len(numbers)
-
-
-# -------------------------------------------------------------------------------------------------
-def tohex(val, nbits):
-	return hex((val + (1 << nbits)) % (1 << nbits))
-
-
-# -------------------------------------------------------------------------------------------------
-def strip_hash_string_stuff(value):
-	return value[2:-1] # #"hello" -> hello
-
-
-# -------------------------------------------------------------------------------------------------
-def strip_argument_string_stuff(value):
-	return value[1:-1] # <hello> -> hello
-
-
-# -------------------------------------------------------------------------------------------------
-def handle_string_stuff(value):
-	if value[0] == '"':
-		token = TokenType.STRING
-	else:
-		token = TokenType.LOCALSTRING
-	return token, value[1:-1].replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
-
-
-# -------------------------------------------------------------------------------------------------
-def resolve_checksum_name_tuple(value):
-
-	if value[0] is not None:
-		return value[0] # return checksum name string ex "hello"
-
-	if value[1] is not None and isinstance(value[1], int):
-		# @todo: lookup name from table 
-		return F"{value[1]:#010x}" # return formatted checksum string "0xc9ef5979"
-
-	raise ValueError('Trying to resolve checksum name, but no name or checksum was passed...')
-
-
-# -------------------------------------------------------------------------------------------------
-def resolve_checksum_tuple(value):
-
-	# if we have the name string generate the checksum
-	if value[0] is not None:
-		checksum = crc32_generate(value[0])
-		#print(F"Resolving checksum {checksum:#010x}")
-		return checksum, value[0]
-
-	# if we (only) have the checksum, just return it
-	if value[1] is not None and isinstance(value[1], int):
-		checksum = value[1]
-		#print(F"Resolving checksum {checksum:#010x}")
-		return checksum, None
-
-	raise ValueError('Trying to resolve checksum, but no name or checksum was passed...')
-
-
-# -------------------------------------------------------------------------------------------------
-def is_token_type_random_keyword(token):
-	return token in (
-		TokenType.KEYWORD_RANDOM,
-		TokenType.KEYWORD_RANDOM2,
-		TokenType.KEYWORD_RANDOMNOREPEAT,
-		TokenType.KEYWORD_RANDOMPERMUTE,
-	)
-
-
-# -------------------------------------------------------------------------------------------------
 def skip_random_operator(iterator):
 	parenth_count = 1
 	# @todo: skip whitespace
@@ -111,7 +35,7 @@ def skip_random_operator(iterator):
 		raise errors.InvalidFormatError("Random keyword must be followed by an open parenthesis...")
 
 	for token in iterator:
-		if is_token_type_random_keyword(token['type']):
+		if qutils.is_token_type_random_keyword(token['type']):
 			skip_random_operator(iterator)
 		elif token['type'] is TokenType.ENDOFFILE:
 			raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
@@ -134,7 +58,7 @@ def get_random_operator_count(tokens):
 	iterator = iter(tokens)
 	# @todo: skip whitespace
 	for token in iterator:
-		if is_token_type_random_keyword(token['type']):
+		if qutils.is_token_type_random_keyword(token['type']):
 			skip_random_operator(iterator)
 		elif token['type'] is TokenType.ENDOFFILE:
 			raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
@@ -440,7 +364,7 @@ class QTokenIterator:
 
 					if kind == 'INTERNAL_VECTOR':
 						try:
-							result, count = extract_numbers_to_tuple(value)
+							result, count = qutils.extract_numbers_to_tuple(value)
 							if count == 2:
 								token_type, token_value = (TokenType.PAIR, result)
 							elif count == 3:
@@ -459,7 +383,7 @@ class QTokenIterator:
 						token_type, token_value = (TokenType.HEXINTEGER, int(value, 0))
 
 					elif kind == 'STRING':
-						token_type, token_value = handle_string_stuff(value)
+						token_type, token_value = qutils.handle_string_stuff(value)
 
 					elif kind in QTokenIterator.token_misc_lookup_table.keys():
 						token_type, token_value = QTokenIterator.token_misc_lookup_table[kind]
@@ -535,21 +459,21 @@ class QTokenIterator:
 						token_type, token_value = (TokenType.INTERNAL_LABEL, value.split(':')[0])
 
 					elif kind == 'INTERNAL_STRCHECKSUM':
-						value = strip_hash_string_stuff(value)
+						value = qutils.strip_hash_string_stuff(value)
 						token_type, token_value = (TokenType.NAME, (value, None))
 					elif kind == 'INTERNAL_HEXCHECKSUM':
-						value = strip_hash_string_stuff(value)
+						value = qutils.strip_hash_string_stuff(value)
 						token_type, token_value = (TokenType.NAME, (None, int(value, 0)))
 
 					elif kind == 'INTERNAL_ARGUMENTSTRCHECKSUM':
-						value = strip_hash_string_stuff(strip_argument_string_stuff(value))
+						value = qutils.strip_hash_string_stuff(qutils.strip_argument_string_stuff(value))
 						token_type, token_value = (TokenType.ARGUMENT, (value, None))
 					elif kind == 'INTERNAL_ARGUMENTHEXCHECKSUM':
-						value = strip_hash_string_stuff(strip_argument_string_stuff(value))
+						value = qutils.strip_hash_string_stuff(qutils.strip_argument_string_stuff(value))
 						token_type, token_value = (TokenType.ARGUMENT, (None, int(value, 0)))
 
 					elif kind == 'ARGUMENT':
-						value = strip_argument_string_stuff(value)
+						value = qutils.strip_argument_string_stuff(value)
 						token_type, token_value = (TokenType.ARGUMENT, (value, None))
 					elif kind == 'ALLARGS':
 						token_type, token_value = (TokenType.ALLARGS, None)
@@ -775,7 +699,7 @@ class QB:
 				if not parsing_script:
 					print_token_error_message(current_token)
 					raise errors.KeywordMismatchError("Unexpected `endscript` keyword without matching script at line...")
-				script_display_name = resolve_checksum_name_tuple(current_script_name)
+				script_display_name = qutils.resolve_checksum_name_tuple(current_script_name)
 				if loop_count > 0:
 					print_token_error_message(current_token)
 					raise errors.KeywordMismatchError(F"Missing `repeat` keyword in script `{script_display_name}`")
@@ -1021,7 +945,7 @@ class QB:
 			elif current_token_type is TokenType.ARGUMENT:
 				writer.write_uint8(TokenType.ARGUMENT.value)
 				writer.write_uint8(TokenType.NAME.value)
-				checksum, name = resolve_checksum_tuple(current_token['value'])
+				checksum, name = qutils.resolve_checksum_tuple(current_token['value'])
 				writer.write_uint32(checksum)
 				if name:
 					if not self.checksums.get(checksum):
@@ -1032,7 +956,7 @@ class QB:
 
 			elif current_token_type is TokenType.NAME:
 				writer.write_uint8(TokenType.NAME.value)
-				checksum, name = resolve_checksum_tuple(current_token['value'])
+				checksum, name = qutils.resolve_checksum_tuple(current_token['value'])
 				writer.write_uint32(checksum)
 				if name:
 					if not self.checksums.get(checksum):
@@ -1077,7 +1001,7 @@ class QB:
 					raise errors.InvalidFormatError(F"Expected `{TokenType.PAIR}` token proceeding `{current_token_type}`, but found `{next_token['type']}`...")
 				writer.write_uint8(current_token_type.value)
 
-			elif is_token_type_random_keyword(current_token_type):
+			elif qutils.is_token_type_random_keyword(current_token_type):
 				next_token = self.tokens[index + 1]
 				if next_token['type'] is not TokenType.OPENPARENTH:
 					print_token_error_message(next_token)
@@ -1191,3 +1115,223 @@ class QB:
 			raise ValueError('The byte stream has no data!')
 		print(self.stream.getvalue().hex())
 		return True
+
+	# ---------------------------------------------------------------------------------------------
+	def to_struct(self, resolve=False):
+
+		script = False
+		assignment = False
+		keyname = None
+
+		scope = QStruct()
+
+		# parse tokens		
+		for index, token in enumerate(self.tokens):
+		
+			if scope is None:
+				raise ValueError("Scope is None!!!")
+
+			token_type = token['type']
+
+			if script and token_type is not TokenType.KEYWORD_ENDSCRIPT:
+				continue
+
+			if assignment:
+				if not isinstance(scope, QStruct):
+					raise TypeError("Unexpected scope type for value assignment!")
+				if qutils.is_token_type_primitive(token_type):
+					assignment = False
+					scope[keyname] = QComponent.from_token(token)
+				elif token_type is TokenType.STARTARRAY:
+					assignment = False
+					scope[keyname] = QArray(parent=scope)
+					scope = scope[keyname]
+				elif token_type is TokenType.STARTSTRUCT:
+					assignment = False
+					scope[keyname] = QStruct(parent=scope)
+					scope = scope[keyname]
+
+			elif isinstance(scope, QArray):
+				if qutils.is_token_type_primitive(token_type):
+					scope.append(QComponent.from_token(token))
+				elif token_type in [TokenType.COMMA, TokenType.ENDOFLINE]:
+					continue
+				elif token_type is TokenType.STARTARRAY:
+					scope.append(QArray(parent=scope))
+					scope = scope[-1]
+				elif token_type is TokenType.ENDARRAY:
+					scope = scope.parent
+				elif token_type is TokenType.STARTSTRUCT:
+					scope.append(QStruct(parent=scope))
+					scope = scope[-1]
+				elif token_type is TokenType.ENDSTRUCT:
+					raise Exception("Unexpected ENDSTRUCT with no matching STARTSTRUCT token!")
+				else:
+					raise NotImplementedError(F"Unexpected array token type! `{token_type}`")
+
+			elif isinstance(scope, QStruct):
+				if token_type is TokenType.NAME:
+					# struct key name or global var name
+					keyname = qutils.resolve_checksum_name_tuple(token['value'])
+					scope[keyname] = None
+				elif token_type is TokenType.ASSIGN:
+					assignment = True
+				elif token_type is TokenType.STARTSTRUCT:
+					raise NotImplementedError("Unexpected STARTSTRUCT maybe function parameter?")
+				elif token_type is TokenType.ENDSTRUCT:
+					scope = scope.parent
+				elif token_type is TokenType.STARTARRAY:
+					raise NotImplementedError("Unexpected STARTARRAY maybe function parameters?")
+				elif token_type is TokenType.ENDARRAY:
+					raise Exception("Unexpected ENDARRAY with no matching STARTARRAY token!")
+				elif token_type is TokenType.KEYWORD_SCRIPT:
+					script = True
+					scriptname = qutils.resolve_checksum_name_tuple(self.tokens[index + 1]['value'])
+					scope[scriptname] = QComponent(None, ElementType.QSCRIPT)
+				elif token_type is TokenType.KEYWORD_ENDSCRIPT:
+					script = False
+
+		# resolve references, ncomps structs etc...
+		# @warn: only knows the current file scope!
+		if resolve:
+			scope.resolve_refs(scope)
+
+		return scope
+
+	# ---------------------------------------------------------------------------------------------
+	def to_json(self, filename):
+		pathname = Path(filename).resolve()
+		if not self.stream:
+			raise ValueError('The byte stream has no data!')
+		root = self.to_struct(resolve=True)
+		with open(pathname, 'w') as out:
+			json.dump(root.to_json(), out, indent=4)
+		return True
+
+
+# ---------------------------------------------------------------------------------------------
+class QComponent:
+
+	def __init__(self, _value=None, _type=ElementType.NONE):
+		self.value = _value
+		self.type = _type
+
+	def to_json(self):
+		return {
+			'__type': str(self.type),
+			'__value': self.value
+		}
+
+	@classmethod
+	def from_token(cls, token):
+		token_type = token['type']
+		token_value = token['value']
+		if token_type is TokenType.NAME:
+			component = cls(qutils.resolve_checksum_name_tuple(token_value), ElementType.NAME)
+		elif token_type is TokenType.INTEGER:
+			component = cls(token_value, ElementType.INTEGER)
+		elif token_type is TokenType.FLOAT:
+			component = cls(token_value, ElementType.FLOAT)
+		elif token_type is TokenType.PAIR:
+			component = cls(token_value, ElementType.PAIR)
+		elif token_type is TokenType.VECTOR:
+			component = cls(token_value, ElementType.VECTOR)
+		elif token_type is TokenType.STRING:
+			component = cls(token_value, ElementType.STRING)
+		else:
+			component = cls(None, ElementType.NONE)
+		return component
+
+
+# ---------------------------------------------------------------------------------------------
+class QStruct:
+
+	def __init__(self, parent=None):
+		self.parent = parent
+		self.elements = {}
+		self.references = {} # eh
+
+	def __getitem__(self, key):
+		# check references first?
+		return self.elements[key]
+
+	def __setitem__(self, key, value):
+		self.elements[key] = value
+
+	def __iter__(self):
+		# check references also?
+		return iter(self.elements)
+
+	def resolve_refs(self, root):
+		for key in list(self.elements):
+			if isinstance(self.elements[key], QArray):
+				self.elements[key].resolve_refs(root)
+			elif self.elements[key] is None:
+				if key in root.elements.keys():
+					if isinstance(root[key], QStruct):
+						del self.elements[key] # cleanup reference name?
+						root[key].resolve_refs(root) # @warn: recursion
+						# @todo: use self.references struct instead?
+						self.elements.update(root[key].elements)
+
+	def to_json(self):
+		struct = {}
+		for attr, value in self.elements.items():
+			if isinstance(value, (QStruct, QArray, QComponent)):
+				struct[attr] = value.to_json()
+			else:
+				struct[attr] = value
+		return struct
+
+
+# ---------------------------------------------------------------------------------------------
+class QArray:
+
+	def __init__(self, _type=ElementType.NONE, parent=None):
+		self.parent = parent
+		self.type = _type
+		self.elements = []
+
+	def __getitem__(self, index):
+		return self.elements[index]
+
+	def __setitem__(self, index, value):
+		self.elements[index] = value
+
+	def __iter__(self):
+		return iter(self.elements)
+
+	def append(self, element):
+		self.elements.append(element)
+
+	def remove(self, element):
+		self.elements.remove(element)
+
+	def pop(self, index=-1):
+		self.elements.pop(index)
+
+	def insert(self, index, element):
+		self.elements.insert(index, element)
+
+	def clear(self):
+		self.elements.clear()
+
+	def extend(self, iterable):
+		self.elements.extend(iterable)
+
+	def resolve_refs(self, root):
+		for value in self.elements:
+			# if isinstance(value, QComponent):
+			# 	if value.type is ElementType.NAME and value.value is None:
+			# 		self.elements['__ref']
+			if isinstance(value, QStruct):
+				value.resolve_refs(root)
+
+	def to_json(self):
+		array = []
+		for value in self.elements:
+			if isinstance(value, (QStruct, QArray, QComponent)):
+				array.append(value.to_json())
+			else:
+				array.append(value)
+		return array
