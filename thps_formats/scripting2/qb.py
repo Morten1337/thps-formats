@@ -12,11 +12,9 @@ from pathlib import Path as Path
 from thps_formats.utils.writer import BinaryWriter
 from thps_formats.shared.enums import GameType, GameVersion
 from thps_formats.scripting2.enums import TokenType, ElementType
-from thps_formats.scripting2.crc32 import crc32_generate
 import thps_formats.scripting2.utils as qutils
 
-import thps_formats.scripting2.errors as errors
-from thps_formats.scripting2.errors import (print_token_error_message,highlight_error_with_indicator)
+import thps_formats.scripting2.error as error
 
 # @warn: probably shouldnt have this here...
 colorama.init(autoreset=False)
@@ -33,16 +31,16 @@ def skip_random_operator(iterator):
 	# @todo: skip whitespace
 	next_token = next(iterator)
 	if next_token['type'] is not TokenType.OPENPARENTH:
-		raise errors.InvalidFormatError("Random keyword must be followed by an open parenthesis...")
+		raise error.InvalidFormatError("Random keyword must be followed by an open parenthesis...")
 
 	for token in iterator:
 		if qutils.is_token_type_random_keyword(token['type']):
 			skip_random_operator(iterator)
 		elif token['type'] is TokenType.ENDOFFILE:
-			raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
+			raise error.TokenMismatchError('Missing close parenthesis after Random operator...')
 		elif token['type'] is TokenType.KEYWORD_ENDSCRIPT:
 			if parenth_count > 0:
-				raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
+				raise error.TokenMismatchError('Missing close parenthesis after Random operator...')
 			break # @todo: verify
 		elif token['type'] is TokenType.OPENPARENTH:
 			parenth_count += 1
@@ -62,10 +60,10 @@ def get_random_operator_count(tokens):
 		if qutils.is_token_type_random_keyword(token['type']):
 			skip_random_operator(iterator)
 		elif token['type'] is TokenType.ENDOFFILE:
-			raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
+			raise error.TokenMismatchError('Missing close parenthesis after Random operator...')
 		elif token['type'] is TokenType.KEYWORD_ENDSCRIPT:
 			if parenth_count > 0:
-				raise errors.TokenMismatchError('Missing close parenthesis after Random operator...')
+				raise error.TokenMismatchError('Missing close parenthesis after Random operator...')
 			break # @todo: verify
 		elif token['type'] is TokenType.KEYWORD_AT:
 			operator_count += 1
@@ -356,8 +354,8 @@ class QTokenIterator:
 						self.skipping_block_comment = True
 						continue
 					elif kind == 'INTERNAL_COMMENTBLOCKEND':
-						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-						raise errors.InvalidFormatError('Unexpected `*/` without matching open block comment...')
+						print(error.highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+						raise error.InvalidFormatError('Unexpected `*/` without matching open block comment...')
 
 					if kind not in ('INTERNAL_ELSEDEF', 'INTERNAL_ENDIFDEF', 'INTERNAL_IFDEF', 'INTERNAL_IFNDEF'):
 						if not self.directive_stack_active[-1]:
@@ -371,9 +369,9 @@ class QTokenIterator:
 							elif count == 3:
 								token_type, token_value = (TokenType.VECTOR, result)
 							else:
-								raise errors.InvalidFormatError(F"Unexpected number of elements found when parsing vector: {count} detected... {value}")
-						except errors.InvalidFormatError as ex:
-							print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+								raise error.InvalidFormatError(F"Unexpected number of elements found when parsing vector: {count} detected... {value}")
+						except error.InvalidFormatError as ex:
+							print(error.highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
 							raise ex
 
 					elif kind == 'FLOAT':
@@ -393,7 +391,7 @@ class QTokenIterator:
 						token_type, token_value = QTokenIterator.token_operator_lookup_table[kind]
 
 					elif kind == 'INTERNAL_HASHTAG':
-						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+						print(error.highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
 						raise NotImplementedError(F"Unsupported hashtag `{value}` at line {index}...")
 
 					elif kind == 'INTERNAL_IDENTIFIER':
@@ -407,7 +405,7 @@ class QTokenIterator:
 						token_type, token_value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1].replace('"', ''))
 						if self.level > 0:
 							includepath = Path(token_value).resolve()
-							print(F"{Fore.YELLOW}WARNING: Only one level of file inclusion supported. Skipping '{includepath}'")
+							error.print_warning_message(F"Only one level of file inclusion supported. Skipping '{includepath}'")
 							previous_token_type = TokenType.ENDOFLINE # @hack
 							continue
 					elif kind == 'INTERNAL_RAW':
@@ -437,8 +435,8 @@ class QTokenIterator:
 
 					elif kind == 'INTERNAL_ELSEDEF':
 						if not self.directive_stack_active or not self.directive_stack_names:
-							print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-							raise errors.KeywordMismatchError('Unexpected `#else` keyword without matching `#ifdef`...')
+							print(error.highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+							raise error.KeywordMismatchError('Unexpected `#else` keyword without matching `#ifdef`...')
 						token_type, token_value = (TokenType.INTERNAL_ELSEDEF, self.directive_stack_names[-1])
 						if self.directive_stack_active[-2]: # Check the second last item for the outer context's state
 							self.directive_stack_active[-1] = not self.directive_stack_active[-1]
@@ -447,8 +445,8 @@ class QTokenIterator:
 
 					elif kind == 'INTERNAL_ENDIFDEF':
 						if not self.directive_stack_active or not self.directive_stack_names:
-							print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
-							raise errors.KeywordMismatchError('Unexpected `#endif` keyword without matching `#ifdef`...')
+							print(error.highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+							raise error.KeywordMismatchError('Unexpected `#endif` keyword without matching `#ifdef`...')
 						self.directive_stack_active.pop()
 						token_type, token_value = (TokenType.INTERNAL_ENDIFDEF, self.directive_stack_names.pop())
 						previous_token_type = TokenType.ENDOFLINE # @hack
@@ -481,12 +479,12 @@ class QTokenIterator:
 
 					elif kind in ('INTERNAL_COMMENTINLINE', 'WHITESPACE', 'MISMATCH'):
 						if kind == 'MISMATCH':
-							print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+							print(error.highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
 							raise NotImplementedError(F"Unexpected token `{value}` at line {index}....")
 						continue # Skip spaces, newlines, and mismatches
 
 					if token_type is TokenType.KEYWORD_UNDEFINED:
-						print(highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
+						print(error.highlight_error_with_indicator(stripped_line, index, mo.start(), mo.end()))
 						raise NotImplementedError(F"The lexer token `{kind}` has not been handled properly...")
 
 					previous_token_type = token_type
@@ -654,14 +652,14 @@ class QB:
 
 				includepath = Path(token['value']).resolve()
 				if includepath.is_file():
-					print(F"Including file '{includepath}'")
+					print(F"{Fore.GREEN}Including file '{includepath}'{Style.RESET_ALL}")
 					includesource = LineIterator(includepath)
 					includeiterator = QTokenIterator(includesource, self.defines, level=1)
 					# include all the new tokens in the list! assuming the tokenizer didn't fail...
 					self.tokens.extend(includeiterator)
 				else:
 					# this is fine, as we want to include auto-generated files that may or may not exist...
-					print(F"{Fore.YELLOW}WARNING: Could not include file '{includepath}'")
+					error.print_warning_message(F"Could not include file '{includepath}'")
 				continue # skip writing the internal include token byte to file...
 			
 			# write the normal tokens the list list
@@ -683,12 +681,12 @@ class QB:
 
 			elif current_token_type is TokenType.KEYWORD_SCRIPT:
 				if parsing_script:
-					print_token_error_message(current_token)
-					raise errors.KeywordMismatchError("Unexpected `script` keyword while already inside a script at line...")
+					error.print_token_error_message(current_token)
+					raise error.KeywordMismatchError("Unexpected `script` keyword while already inside a script at line...")
 				next_token = self.tokens[index + 1]
 				if next_token['type'] is not TokenType.NAME:
-					print_token_error_message(next_token)
-					raise errors.InvalidFormatError(F"Expected script name token `{TokenType.NAME}` but found `{next_token['type']}`...")
+					error.print_token_error_message(next_token)
+					raise error.InvalidFormatError(F"Expected script name token `{TokenType.NAME}` but found `{next_token['type']}`...")
 
 				parsing_script = True
 				current_script_name = next_token['value']
@@ -698,22 +696,22 @@ class QB:
 
 			elif current_token_type is TokenType.KEYWORD_ENDSCRIPT:
 				if not parsing_script:
-					print_token_error_message(current_token)
-					raise errors.KeywordMismatchError("Unexpected `endscript` keyword without matching script at line...")
+					error.print_token_error_message(current_token)
+					raise error.KeywordMismatchError("Unexpected `endscript` keyword without matching script at line...")
 				script_display_name = qutils.resolve_checksum_name_tuple(current_script_name)
 				if loop_count > 0:
-					print_token_error_message(current_token)
-					raise errors.KeywordMismatchError(F"Missing `repeat` keyword in script `{script_display_name}`")
+					error.print_token_error_message(current_token)
+					raise error.KeywordMismatchError(F"Missing `repeat` keyword in script `{script_display_name}`")
 				if parenth_count != 0:
-					print_token_error_message(current_token)
-					raise errors.TokenMismatchError(F"Parentheses mismatch in script `{script_display_name}`")
+					error.print_token_error_message(current_token)
+					raise error.TokenMismatchError(F"Parentheses mismatch in script `{script_display_name}`")
 				if script_curly_count > 0:
 					if script_curly_count != curly_count:
-						raise errors.TokenMismatchError(F"Curly bracket mismatch in script `{script_display_name}`")
+						raise error.TokenMismatchError(F"Curly bracket mismatch in script `{script_display_name}`")
 						script_curly_count = 0
 				if script_square_count > 0:
 					if script_square_count != square_count:
-						raise errors.TokenMismatchError(F"Square bracket mismatch in script `{script_display_name}`")
+						raise error.TokenMismatchError(F"Square bracket mismatch in script `{script_display_name}`")
 						script_square_count = 0
 				parsing_script = False
 				current_script_name = None
@@ -721,50 +719,50 @@ class QB:
 
 			elif current_token_type is TokenType.KEYWORD_WHILE:
 				if not parsing_script:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`while` keyword can only be used inside scripts...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`while` keyword can only be used inside scripts...")
 				previous_token = self.tokens[index - 1]
 				if previous_token['type'] is not TokenType.ENDOFLINE:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`while` keyword must be the first word on its line...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`while` keyword must be the first word on its line...")
 				loop_count += 1
 				writer.write_uint8(TokenType.KEYWORD_WHILE.value)
 
 			elif current_token_type is TokenType.KEYWORD_REPEAT:
 				if not parsing_script:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`repeat` keyword can only be used inside scripts...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`repeat` keyword can only be used inside scripts...")
 				if loop_count <= 0:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`repeat` keyword can only be used with while loops...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`repeat` keyword can only be used with while loops...")
 				previous_token = self.tokens[index - 1]
 				if previous_token['type'] is not TokenType.ENDOFLINE:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`repeat` keyword must be the first word on its line...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`repeat` keyword must be the first word on its line...")
 				loop_count -= 1
 				writer.write_uint8(TokenType.KEYWORD_REPEAT.value)
 
 			elif current_token_type is TokenType.KEYWORD_BREAK:
 				if not parsing_script:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`break` keyword can only be used inside scripts...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`break` keyword can only be used inside scripts...")
 				if loop_count <= 0:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`break` keyword can only be used inside while loops...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`break` keyword can only be used inside while loops...")
 				previous_token = self.tokens[index - 1]
 				if previous_token['type'] is not TokenType.ENDOFLINE:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`break` keyword must be the first word on its line...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`break` keyword must be the first word on its line...")
 				writer.write_uint8(TokenType.KEYWORD_BREAK.value)
 
 			elif current_token_type is TokenType.KEYWORD_RETURN:
 				if not parsing_script:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`return` keyword can only be used inside scripts...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`return` keyword can only be used inside scripts...")
 				previous_token = self.tokens[index - 1]
 				if previous_token['type'] is not TokenType.ENDOFLINE:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`return` keyword must be the first word on its line...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`return` keyword must be the first word on its line...")
 				writer.write_uint8(TokenType.KEYWORD_RETURN.value)
 
 			elif current_token_type is TokenType.STARTSTRUCT:
@@ -774,11 +772,11 @@ class QB:
 
 			elif current_token_type is TokenType.ENDSTRUCT:
 				if (curly_count < 1):
-					print_token_error_message(current_token)
-					raise errors.TokenMismatchError('Curly bracket mismatch!')
+					error.print_token_error_message(current_token)
+					raise error.TokenMismatchError('Curly bracket mismatch!')
 				if (curly_tracker[-1][0] != square_count):
-					print_token_error_message(current_token)
-					raise errors.TokenMismatchError('Square bracket mismatch!')
+					error.print_token_error_message(current_token)
+					raise error.TokenMismatchError('Square bracket mismatch!')
 				curly_count -= 1
 				curly_tracker.pop(curly_count)
 				writer.write_uint8(TokenType.ENDSTRUCT.value)
@@ -790,11 +788,11 @@ class QB:
 
 			elif current_token_type is TokenType.ENDARRAY:
 				if (square_count < 1):
-					print_token_error_message(current_token)
-					raise errors.TokenMismatchError('Square bracket mismatch!')
+					error.print_token_error_message(current_token)
+					raise error.TokenMismatchError('Square bracket mismatch!')
 				if (square_tracker[-1][1] != curly_count):
-					print_token_error_message(current_token)
-					raise errors.TokenMismatchError('Curly bracket mismatch!')
+					error.print_token_error_message(current_token)
+					raise error.TokenMismatchError('Curly bracket mismatch!')
 				square_count -= 1
 				square_tracker.pop(square_count)
 				writer.write_uint8(TokenType.ENDARRAY.value)
@@ -808,8 +806,8 @@ class QB:
 				if random_count > 0:
 					if (random_tracker[-1].parenth_count == parenth_count):
 						if (random_tracker[-1].current_offset != random_tracker[-1].offset_count):
-							print_token_error_message(current_token)
-							raise errors.InvalidFormatError("Unexpected close parenthesis in Random operator...")
+							error.print_token_error_message(current_token)
+							raise error.InvalidFormatError("Unexpected close parenthesis in Random operator...")
 						# Make each of the jump commands at the end of each block jump to after the random operator.
 						current_buffer_size = writer.stream.tell()
 						for i in range(1, random_tracker[-1].offset_count):
@@ -817,7 +815,7 @@ class QB:
 							jump_offset = current_buffer_size - after_offset
 							# @todo: check for long jump token
 							if current_buffer_size < after_offset:
-								raise errors.InvalidFormatError("WritePos less than afterJump...")
+								raise error.InvalidFormatError("WritePos less than afterJump...")
 							writer.seek(after_offset - 4)
 							writer.write_uint32(jump_offset)
 						random_count -= 1
@@ -835,8 +833,8 @@ class QB:
 
 			elif current_token_type in (TokenType.KEYWORD_CASE, TokenType.KEYWORD_DEFAULT):
 				if switch_count <= 0:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError(F"`{current_token_type}` keyword must be used inside a switch statement...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError(F"`{current_token_type}` keyword must be used inside a switch statement...")
 				if self.get_game_type() >= GameType.THUG2:
 					if switch_case_expected:
 						writer.write_uint8(current_token_type.value)
@@ -857,11 +855,11 @@ class QB:
 
 			elif current_token_type is TokenType.KEYWORD_ENDSWITCH:
 				if switch_count <= 0:
-					print_token_error_message(current_token)
-					raise errors.KeywordMismatchError("Unexpected `endswitch` keyword without corresponding `switch`...")
+					error.print_token_error_message(current_token)
+					raise error.KeywordMismatchError("Unexpected `endswitch` keyword without corresponding `switch`...")
 				if switch_case_expected:
-					print_token_error_message(current_token)
-					raise errors.KeywordMismatchError("Unexpected `endswitch` without a `case`...")
+					error.print_token_error_message(current_token)
+					raise error.KeywordMismatchError("Unexpected `endswitch` without a `case`...")
 				writer.write_uint8(current_token_type.value)
 				if self.get_game_type() >= GameType.THUG2:
 					switch_tracker[-1].set_to_end_switch(writer.stream.tell())
@@ -879,12 +877,12 @@ class QB:
 
 			elif current_token_type is TokenType.KEYWORD_IF:
 				if not parsing_script:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`if` keyword can only be used inside scripts...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`if` keyword can only be used inside scripts...")
 				previous_token = self.tokens[index - 1]
 				if previous_token['type'] is not TokenType.ENDOFLINE:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`if` keyword must be the first word on its line...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`if` keyword must be the first word on its line...")
 				if_count += 1
 				if self.get_game_type() >= GameType.THUG2:
 					writer.write_uint8(TokenType.KEYWORD_IF2.value)
@@ -904,7 +902,7 @@ class QB:
 
 			elif current_token_type is TokenType.KEYWORD_ELSEIF:
 				if self.get_game_type() == GameType.THPG:
-					print_token_error_message(current_token)
+					error.print_token_error_message(current_token)
 					raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
 				# @todo: implement? can use regular if and else tokens for the other games...
 
@@ -925,13 +923,13 @@ class QB:
 					if_tracker.pop(if_count)
 
 			elif current_token_type in (TokenType.OPERATOR_SHIFTRIGHT, TokenType.OPERATOR_SHIFTLEFT):
-				print_token_error_message(current_token)
+				error.print_token_error_message(current_token)
 				raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
 				writer.write_uint8(current_token_type.value)
 
 			elif current_token_type in (TokenType.GREATERTHANEQUAL, TokenType.LESSTHANEQUAL):
 				if self.get_game_type() == GameType.THPG:
-					print_token_error_message(current_token)
+					error.print_token_error_message(current_token)
 					raise NotImplementedError(F"Unsupported operator `{current_token_type}` for `{self.params['game']}`...")
 				writer.write_uint8(current_token_type.value)
 
@@ -994,19 +992,19 @@ class QB:
 
 			elif current_token_type in (TokenType.KEYWORD_RANDOMRANGE, TokenType.KEYWORD_RANDOMRANGE2):
 				if not parsing_script:
-					print_token_error_message(current_token)
-					raise errors.UnexpectedScopeError("`RandomRange` keyword can only be used inside scripts...")
+					error.print_token_error_message(current_token)
+					raise error.UnexpectedScopeError("`RandomRange` keyword can only be used inside scripts...")
 				next_token = self.tokens[index + 1]
 				if next_token['type'] is not TokenType.PAIR:
-					print_token_error_message(next_token)
-					raise errors.InvalidFormatError(F"Expected `{TokenType.PAIR}` token proceeding `{current_token_type}`, but found `{next_token['type']}`...")
+					error.print_token_error_message(next_token)
+					raise error.InvalidFormatError(F"Expected `{TokenType.PAIR}` token proceeding `{current_token_type}`, but found `{next_token['type']}`...")
 				writer.write_uint8(current_token_type.value)
 
 			elif qutils.is_token_type_random_keyword(current_token_type):
 				next_token = self.tokens[index + 1]
 				if next_token['type'] is not TokenType.OPENPARENTH:
-					print_token_error_message(next_token)
-					raise errors.InvalidFormatError("Random keyword must be followed by an open parenthesis...")
+					error.print_token_error_message(next_token)
+					raise error.InvalidFormatError("Random keyword must be followed by an open parenthesis...")
 				next_token['skip'] = True
 				parenth_count += 1 # eh
 				offset_count = get_random_operator_count(self.tokens[index + 1:])
@@ -1057,8 +1055,8 @@ class QB:
 						next_token['skip'] = True
 						weight_value = next_token['value']
 					else:
-						print_token_error_message(next_token)
-						raise errors.InvalidFormatError("In the random operator, @* must be followed by an integer...")
+						error.print_token_error_message(next_token)
+						raise error.InvalidFormatError("In the random operator, @* must be followed by an integer...")
 					# @todo: validate
 					if self.get_game_type() > GameType.THPS4:
 						writer.seek(random_tracker[-1].weights_offset + ((random_tracker[-1].current_offset - 1) * 2))

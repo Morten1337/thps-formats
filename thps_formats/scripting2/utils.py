@@ -2,7 +2,7 @@ import re
 
 from thps_formats.scripting2.crc32 import crc32_generate
 from thps_formats.scripting2.enums import TokenType
-import thps_formats.scripting2.errors as errors
+import thps_formats.scripting2.error as error
 
 
 # -------------------------------------------------------------------------------------------------
@@ -14,7 +14,7 @@ def extract_numbers_to_tuple(value):
 	# Identify invalid segments
 	invalid_numbers = [segment for segment in segments if not (re.fullmatch(r'^-?\d*\.\d+$', segment) or re.fullmatch(r'^-?\d+$', segment)) and segment]
 	if invalid_numbers:
-		raise errors.InvalidFormatError(F"Unable to parse one or more numbers in the vector... {invalid_numbers}")
+		raise error.InvalidFormatError(F"Unable to parse one or more numbers in the vector... {invalid_numbers}")
 	return tuple(numbers), len(numbers)
 
 
