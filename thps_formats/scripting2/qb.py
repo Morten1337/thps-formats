@@ -11,7 +11,7 @@ from pathlib import Path as Path
 
 from thps_formats.utils.writer import BinaryWriter
 from thps_formats.shared.enums import GameType, GameVersion
-from thps_formats.scripting2.enums import TokenType, ElementType
+from thps_formats.scripting2.enums import TokenType, ComponentType
 import thps_formats.scripting2.utils as qutils
 
 import thps_formats.scripting2.error as error
@@ -1186,7 +1186,7 @@ class QB:
 				elif token_type is TokenType.KEYWORD_SCRIPT:
 					script = True
 					scriptname = qutils.resolve_checksum_name_tuple(self.tokens[index + 1]['value'])
-					scope[scriptname] = QComponent(None, ElementType.QSCRIPT)
+					scope[scriptname] = QComponent(None, ComponentType.SCRIPT)
 				elif token_type is TokenType.KEYWORD_ENDSCRIPT:
 					script = False
 
@@ -1214,21 +1214,21 @@ class QB:
 class QComponent:
 
 	# ---------------------------------------------------------------------------------------------
-	def __init__(self, _value=None, _type=ElementType.NONE):
+	def __init__(self, _value=None, _type=ComponentType.NONE):
 		self.value = _value
 		self.type = _type
 
 	# ---------------------------------------------------------------------------------------------
 	def __int__(self):
-		# used for casting QComponent with ElementType.INTEGER to int
-		if self.type is not ElementType.INTEGER:
+		# used for casting QComponent with ComponentType.INTEGER to int
+		if self.type is not ComponentType.INTEGER:
 			raise ValueError('QComponent must be INTEGER type!')
 		return int(self.value)
 
 	# ---------------------------------------------------------------------------------------------
 	def __float__(self):
-		# used for casting QComponent with ElementType.FLOAT to float
-		if self.type is not ElementType.FLOAT:
+		# used for casting QComponent with ComponentType.FLOAT to float
+		if self.type is not ComponentType.FLOAT:
 			raise ValueError('QComponent must be FLOAT type!')
 		return float(self.value)
 
@@ -1240,17 +1240,17 @@ class QComponent:
 	# ---------------------------------------------------------------------------------------------
 	def __repr__(self):
 		# used for printing out in json format
-		if self.type is ElementType.INTEGER:
+		if self.type is ComponentType.INTEGER:
 			return int(self.value)
-		elif self.type is ElementType.FLOAT:
+		elif self.type is ComponentType.FLOAT:
 			return float(self.value)
-		elif self.type is ElementType.NAME:
+		elif self.type is ComponentType.NAME:
 			return F"#{self.value}"
-		elif self.type is ElementType.VECTOR:
+		elif self.type is ComponentType.VECTOR:
 			return F"({self.value[0]:.8f},{self.value[1]:.8f},{self.value[2]:.8f})"
-		elif self.type is ElementType.PAIR:
+		elif self.type is ComponentType.PAIR:
 			return F"({self.value[0]:.8f},{self.value[1]:.8f})"
-		elif self.type is ElementType.QSCRIPT:
+		elif self.type is ComponentType.SCRIPT:
 			return "<SCRIPT>"
 		else:
 			return str(self.value)
@@ -1276,23 +1276,23 @@ class QComponent:
 		token_type = token['type']
 		token_value = token['value']
 		if token_type is TokenType.NAME:
-			component = cls(qutils.resolve_checksum_name_tuple(token_value), ElementType.NAME)
+			component = cls(qutils.resolve_checksum_name_tuple(token_value), ComponentType.NAME)
 		elif token_type is TokenType.INTEGER:
-			component = cls(token_value, ElementType.INTEGER)
+			component = cls(token_value, ComponentType.INTEGER)
 		elif token_type is TokenType.HEXINTEGER:
-			component = cls(token_value, ElementType.INTEGER)
+			component = cls(token_value, ComponentType.INTEGER)
 		elif token_type is TokenType.FLOAT:
-			component = cls(token_value, ElementType.FLOAT)
+			component = cls(token_value, ComponentType.FLOAT)
 		elif token_type is TokenType.PAIR:
-			component = cls(token_value, ElementType.PAIR)
+			component = cls(token_value, ComponentType.PAIR)
 		elif token_type is TokenType.VECTOR:
-			component = cls(token_value, ElementType.VECTOR)
+			component = cls(token_value, ComponentType.VECTOR)
 		elif token_type is TokenType.LOCALSTRING:
-			component = cls(token_value, ElementType.STRING)
+			component = cls(token_value, ComponentType.STRING)
 		elif token_type is TokenType.STRING:
-			component = cls(token_value, ElementType.STRING)
+			component = cls(token_value, ComponentType.STRING)
 		else:
-			component = cls(None, ElementType.NONE)
+			component = cls(None, ComponentType.NONE)
 		return component
 
 
@@ -1442,7 +1442,7 @@ class QArray(UserList):
 	def resolve_references(self, root):
 		for value in self.data:
 			# if isinstance(value, QComponent):
-			# 	if value.type is ElementType.NAME and value.value is None:
+			# 	if value.type is ComponentType.NAME and value.value is None:
 			# 		print('WARNING: Array element may be a reference?')
 			if isinstance(value, QStruct):
 				value.resolve_references(root)

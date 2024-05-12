@@ -2,24 +2,15 @@ from enum import Enum
 
 
 # -------------------------------------------------------------------------------------------------
-class ElementType(Enum):
-
-	# @todo: include the other symobl types
-
-	NONE = 0x00
-	INTEGER = 0x01
-	FLOAT = 0x02
-	STRING = 0x03
-	LOCALSTRING = 0x04
-	PAIR = 0x05
-	VECTOR = 0x06
-	QSCRIPT = 0x07
-	CFUNCTION = 0x08
-	MEMBERFUNCTION = 0x09
-	STRUCTURE = 0x0A
-	STRUCTUREPOINTER = 0x0B
-	ARRAY = 0x0C
-	NAME = 0x0D
+class ComponentType(Enum):
+	NONE = 'NONE'
+	INTEGER = 'INTEGER'
+	FLOAT = 'FLOAT'
+	STRING = 'STRING'
+	PAIR = 'PAIR'
+	VECTOR = 'VECTOR'
+	SCRIPT = 'SCRIPT'
+	NAME = 'NAME'
 
 
 # -------------------------------------------------------------------------------------------------
