@@ -421,6 +421,8 @@ class QTokenIterator:
 
 					elif kind == 'INTERNAL_IFDEF':
 						token_type, token_value = (TokenType.INTERNAL_IFDEF, value.split(' ')[1])
+						if '__IGNORE_IFDEF_CONDITIONS__' in self.defined_names:
+							token_value = '__IGNORE_IFDEF_CONDITIONS__'
 						self.directive_stack_names.append(token_value)
 						self.directive_stack_active.append(token_value in self.defined_names and self.directive_stack_active[-1])
 						previous_token_type = TokenType.ENDOFLINE # @hack
@@ -428,6 +430,8 @@ class QTokenIterator:
 
 					elif kind == 'INTERNAL_IFNDEF':
 						token_type, token_value = (TokenType.INTERNAL_IFNDEF, value.split(' ')[1])
+						if '__IGNORE_IFDEF_CONDITIONS__' in self.defined_names:
+							token_value = '__IGNORE_IFDEF_CONDITIONS__'
 						self.directive_stack_names.append(token_value)
 						self.directive_stack_active.append(token_value not in self.defined_names and self.directive_stack_active[-1])
 						previous_token_type = TokenType.ENDOFLINE # @hack
