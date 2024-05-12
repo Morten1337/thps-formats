@@ -1116,13 +1116,14 @@ class QB:
 		return True
 
 	# ---------------------------------------------------------------------------------------------
-	def to_struct(self, resolve=False):
+	def to_struct(self, resolve=False, scope=None):
 
 		script = False
 		assignment = False
 		keyname = None
-
-		scope = QStruct()
+		
+		if scope is None:
+			scope = QStruct()
 
 		# parse tokens		
 		for index, token in enumerate(self.tokens):
