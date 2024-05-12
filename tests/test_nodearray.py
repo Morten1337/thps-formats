@@ -1,3 +1,4 @@
+from pathlib import Path
 from thps_formats.scripting2.qb import QB
 from thps_formats.shared.enums import GameVersion
 
@@ -8,21 +9,28 @@ params = {
 }
 
 
+# -------------------------------------------------------------------------------------------------
 def test_nodearray():
 	qb = QB.from_file('./tests/data/ba.q', params, defines)
 	assert qb is not None
 	assert qb.to_json('./tests/data/ba.json')
 
+
+# -------------------------------------------------------------------------------------------------
 # def test_cas_skater_shared():
 # 	qb = QB.from_file('./tests/data/thugpro/source/code/qb/game/cas_skater_shared.q', params, defines)
 # 	assert qb is not None
 # 	assert qb.to_json('./tests/data/cas_skater_shared.json')
 
+
+# -------------------------------------------------------------------------------------------------
 # def test_shp_scripts():
 # 	qb = QB.from_file('./tests/data/shp_scripts.q', params, defines)
 # 	assert qb is not None
 # 	assert qb.to_json('./tests/data/shp_scripts.json')
 
+
+# -------------------------------------------------------------------------------------------------
 # def test_hex():
 # 	qb = QB.from_string("""
 # 	Structure = {
@@ -44,6 +52,7 @@ def test_nodearray():
 # 	assert qb.to_json('./tests/data/structure.json')
 
 
+# -------------------------------------------------------------------------------------------------
 def test_nodearray2():
 	qb = QB.from_file('./tests/data/ba.q', params, defines)
 	assert qb is not None
@@ -57,6 +66,7 @@ def test_nodearray2():
 			print(F"-- Found node `{node['Name']}` with flag `Day_on` ")
 
 
+# -------------------------------------------------------------------------------------------------
 node_name_patterns_morning = [
 	'MORNINGON_',
 	'DAYOFF_',
@@ -104,12 +114,14 @@ node_name_patterns_night = [
 ]
 
 
+# -------------------------------------------------------------------------------------------------
 def _handle_tod_on_flag(node, flagname):
 	if flagname in node:
 		# None is also valid, because in thug1 this can be a flag...
 		return node.get_value(flagname).upper() in ['NONE', '1', 'TRUE']
 
 
+# -------------------------------------------------------------------------------------------------
 def _handle_default_object(node):
 	if 'CreatedAtStart' in node:
 		return True
@@ -122,6 +134,7 @@ def _handle_default_object(node):
 		return False
 
 
+# -------------------------------------------------------------------------------------------------
 def test_todscripts():
 
 	scenename = 'ba'
