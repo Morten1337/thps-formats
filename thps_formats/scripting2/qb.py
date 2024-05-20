@@ -13,6 +13,7 @@ from thps_formats.utils.writer import BinaryWriter
 from thps_formats.shared.enums import GameType, GameVersion
 from thps_formats.scripting2.enums import TokenType, ComponentType
 import thps_formats.scripting2.utils as qutils
+from thps_formats.scripting2.crc32 import crc32_generate
 
 import thps_formats.scripting2.error as error
 
@@ -21,8 +22,9 @@ colorama.init(autoreset=False)
 
 # --- todo ----------------------------------------------------------------------------------------
 # - tokenizer->lexer->compiler
-# - fix incorrect line numbers
 # - improve error message handling
+# - refactor crc32 checksum handling
+# 	- load external database
 
 
 # -------------------------------------------------------------------------------------------------
@@ -399,7 +401,8 @@ class QTokenIterator:
 						if keyword in QTokenIterator.token_keyword_lookup_table.keys():
 							token_type, token_value = QTokenIterator.token_keyword_lookup_table[keyword]
 						else:
-							token_type, token_value = (TokenType.NAME, (value, None))
+							token_type, token_value = (TokenType.NAME, QChecksum(value))
+							# token_type, token_value = (TokenType.NAME, (value, None))
 
 					elif kind == 'INTERNAL_INCLUDE':
 						token_type, token_value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1].replace('"', ''))
@@ -463,21 +466,21 @@ class QTokenIterator:
 
 					elif kind == 'INTERNAL_STRCHECKSUM':
 						value = qutils.strip_hash_string_stuff(value)
-						token_type, token_value = (TokenType.NAME, (value, None))
+						token_type, token_value = (TokenType.NAME, QChecksum(value))
 					elif kind == 'INTERNAL_HEXCHECKSUM':
 						value = qutils.strip_hash_string_stuff(value)
-						token_type, token_value = (TokenType.NAME, (None, int(value, 0)))
+						token_type, token_value = (TokenType.NAME, QChecksum(int(value, 0)))
 
 					elif kind == 'INTERNAL_ARGUMENTSTRCHECKSUM':
 						value = qutils.strip_hash_string_stuff(qutils.strip_argument_string_stuff(value))
-						token_type, token_value = (TokenType.ARGUMENT, (value, None))
+						token_type, token_value = (TokenType.ARGUMENT, QChecksum(value))
 					elif kind == 'INTERNAL_ARGUMENTHEXCHECKSUM':
 						value = qutils.strip_hash_string_stuff(qutils.strip_argument_string_stuff(value))
-						token_type, token_value = (TokenType.ARGUMENT, (None, int(value, 0)))
+						token_type, token_value = (TokenType.ARGUMENT, QChecksum(int(value, 0)))
 
 					elif kind == 'ARGUMENT':
 						value = qutils.strip_argument_string_stuff(value)
-						token_type, token_value = (TokenType.ARGUMENT, (value, None))
+						token_type, token_value = (TokenType.ARGUMENT, QChecksum(value))
 					elif kind == 'ALLARGS':
 						token_type, token_value = (TokenType.ALLARGS, None)
 
@@ -537,8 +540,11 @@ class QB:
 
 		# output byte stream
 		self.stream = io.BytesIO()
+
 		# checksum debug table
-		self.checksums = {}
+		self.checksums = QChecksumDatabase()
+		self.checksums.clear()
+
 		# defined flags
 		self.defines = [] + defines
 		# q tokens
@@ -702,7 +708,7 @@ class QB:
 				if not parsing_script:
 					error.print_token_error_message(current_token)
 					raise error.KeywordMismatchError("Unexpected `endscript` keyword without matching script at line...")
-				script_display_name = qutils.resolve_checksum_name_tuple(current_script_name)
+				script_display_name = current_script_name.get_name()
 				if loop_count > 0:
 					error.print_token_error_message(current_token)
 					raise error.KeywordMismatchError(F"Missing `repeat` keyword in script `{script_display_name}`")
@@ -948,22 +954,14 @@ class QB:
 			elif current_token_type is TokenType.ARGUMENT:
 				writer.write_uint8(TokenType.ARGUMENT.value)
 				writer.write_uint8(TokenType.NAME.value)
-				checksum, name = qutils.resolve_checksum_tuple(current_token['value'])
-				writer.write_uint32(checksum)
-				if name:
-					if not self.checksums.get(checksum):
-						self.checksums[checksum] = name
+				writer.write_uint32(current_token['value'].get_checksum())
 
 			elif current_token_type is TokenType.ALLARGS:
 				writer.write_uint8(TokenType.ALLARGS.value)
 
 			elif current_token_type is TokenType.NAME:
 				writer.write_uint8(TokenType.NAME.value)
-				checksum, name = qutils.resolve_checksum_tuple(current_token['value'])
-				writer.write_uint32(checksum)
-				if name:
-					if not self.checksums.get(checksum):
-						self.checksums[checksum] = name
+				writer.write_uint32(current_token['value'].get_checksum())
 
 			elif current_token_type is TokenType.INTEGER:
 				writer.write_uint8(TokenType.INTEGER.value)
@@ -1176,7 +1174,7 @@ class QB:
 			elif isinstance(scope, QStruct):
 				if token_type is TokenType.NAME:
 					# struct key name or global var name
-					keyname = qutils.resolve_checksum_name_tuple(token['value'])
+					keyname = token['value'].get_name()
 					scope[keyname] = None
 				elif token_type is TokenType.ASSIGN:
 					assignment = True
@@ -1190,7 +1188,7 @@ class QB:
 					raise Exception("Unexpected ENDARRAY with no matching STARTARRAY token!")
 				elif token_type is TokenType.KEYWORD_SCRIPT:
 					script = True
-					scriptname = qutils.resolve_checksum_name_tuple(self.tokens[index + 1]['value'])
+					scriptname = self.tokens[index + 1]['value'].get_name()
 					scope[scriptname] = QComponent(None, ComponentType.SCRIPT)
 				elif token_type is TokenType.KEYWORD_ENDSCRIPT:
 					script = False
@@ -1214,6 +1212,89 @@ class QB:
 
 
 # @todo: review all the builtin methods and operators
+
+# -------------------------------------------------------------------------------------------------
+class QChecksumDatabase:
+
+	_instance = None
+
+	# ---------------------------------------------------------------------------------------------
+	def __new__(cls):
+		if cls._instance is None:
+			cls._instance = super(QChecksumDatabase, cls).__new__(cls)
+			cls._instance.checksums = {}
+		return cls._instance
+
+	# ---------------------------------------------------------------------------------------------
+	def from_file(self, filename):
+		pass
+
+	# ---------------------------------------------------------------------------------------------
+	def get_name(self, checksum):
+		return self.checksums.get(checksum, None)
+
+	# ---------------------------------------------------------------------------------------------
+	def get_checksum(self, name):
+		checksum = crc32_generate(name)
+		if checksum not in self.checksums:
+			self.checksums[checksum] = name
+		return checksum
+
+	# ---------------------------------------------------------------------------------------------
+	def items(self):
+		return self.checksums.items()
+
+	# ---------------------------------------------------------------------------------------------
+	def clear(self):
+		self.checksums.clear()
+
+	# ---------------------------------------------------------------------------------------------
+	def initialize(self, data):
+		self.checksums = data.copy()
+
+
+# -------------------------------------------------------------------------------------------------
+class QChecksum:
+
+	# global database
+	_global_database = None
+
+	# ---------------------------------------------------------------------------------------------
+	def __init__(self, arg):
+
+		self.manager = QChecksumDatabase()
+		self.checksum = None
+		self.name = None
+
+		if isinstance(arg, str):
+			self.name = arg
+			self.checksum = self.manager.get_checksum(arg)
+
+		elif isinstance(arg, int):
+			self.checksum = arg
+			self.name = self.manager.get_name(arg)
+
+		elif isinstance(arg, tuple) and len(arg) == 2:
+			self.checksum, self.name = qutils.resolve_checksum_tuple(arg)
+		else:
+			raise ValueError('Argument must be a string or int checksum value..') # todo: formatting
+
+	# ---------------------------------------------------------------------------------------------
+	def get_checksum(self):
+		return self.checksum
+
+	# ---------------------------------------------------------------------------------------------
+	def get_name(self):
+		return self.name
+
+	# ---------------------------------------------------------------------------------------------
+	def __int__(self):
+		return self.checksum
+
+	# ---------------------------------------------------------------------------------------------
+	def __str__(self):
+		return self.name if self.name else F"{self.checksum:#010x}"
+
 
 # -------------------------------------------------------------------------------------------------
 class QComponent:
@@ -1281,7 +1362,7 @@ class QComponent:
 		token_type = token['type']
 		token_value = token['value']
 		if token_type is TokenType.NAME:
-			component = cls(qutils.resolve_checksum_name_tuple(token_value), ComponentType.NAME)
+			component = cls(token_value, ComponentType.NAME)
 		elif token_type is TokenType.INTEGER:
 			component = cls(token_value, ComponentType.INTEGER)
 		elif token_type is TokenType.HEXINTEGER:
@@ -1314,7 +1395,7 @@ class QStruct(UserDict):
 
 	# ---------------------------------------------------------------------------------------------
 	def __hash__(self):
-		# required for this type to appear in sets
+		# @hack: return something unique so that this type can appear in sets...
 		return id(self)
 
 	# ---------------------------------------------------------------------------------------------
@@ -1446,9 +1527,6 @@ class QArray(UserList):
 	# ---------------------------------------------------------------------------------------------
 	def resolve_references(self, root):
 		for value in self.data:
-			# if isinstance(value, QComponent):
-			# 	if value.type is ComponentType.NAME and value.value is None:
-			# 		print('WARNING: Array element may be a reference?')
 			if isinstance(value, QStruct):
 				value.resolve_references(root)
 
