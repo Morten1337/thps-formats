@@ -72,3 +72,10 @@ def crc32_generate(string):
 	for char in string.lower():
 		checksum = table[(checksum ^ ord(char)) & 0xff] ^ ((checksum >> 8) & 0x00ffffff)
 	return checksum
+
+def crc32_generate_from_file(filename):
+	checksum = 0xffffffff
+	with open(filename, 'rb') as f:
+		while (byte := f.read(1)):
+			checksum = table[(checksum ^ ord(byte)) & 0xff] ^ ((checksum >> 8) & 0x00ffffff)
+	return checksum ^ 0xffffffff

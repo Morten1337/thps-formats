@@ -125,9 +125,8 @@ def _handle_tod_on_flag(node, flagname):
 def _handle_default_object(node):
 	if 'CreatedAtStart' in node:
 		return True
-	elif 'CreatedFromVariable' in node:
-		if node.root.get_value(node.get_value('CreatedFromVariable'), 0) > 0:
-			return True
+	elif node.root.get_value(node.get_value('CreatedFromVariable'), 0) > 0:
+		return True
 	elif node.get_value('Brightness', 0) > 0:
 		return True
 	else:

@@ -9,6 +9,7 @@ import png
 
 import copy
 
+
 # -------------------------------------------------------------------------------------------------
 def filter_chars_by_id_range(chars, min_id, max_id, exclude_id=None):
 	"""

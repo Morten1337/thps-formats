@@ -22,6 +22,7 @@ colorama.init(autoreset=False)
 
 # --- todo ----------------------------------------------------------------------------------------
 # - tokenizer->lexer->compiler
+# - move helpers and classes to separate files?
 # - improve error message handling
 # - refactor crc32 checksum handling
 # 	- load external database
@@ -402,7 +403,6 @@ class QTokenIterator:
 							token_type, token_value = QTokenIterator.token_keyword_lookup_table[keyword]
 						else:
 							token_type, token_value = (TokenType.NAME, QChecksum(value))
-							# token_type, token_value = (TokenType.NAME, (value, None))
 
 					elif kind == 'INTERNAL_INCLUDE':
 						token_type, token_value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1].replace('"', ''))
@@ -540,11 +540,8 @@ class QB:
 
 		# output byte stream
 		self.stream = io.BytesIO()
-
 		# checksum debug table
-		self.checksums = QChecksumDatabase()
-		self.checksums.clear()
-
+		self.checksums = QChecksumDatabase(clear=True)
 		# defined flags
 		self.defines = [] + defines
 		# q tokens
@@ -552,7 +549,7 @@ class QB:
 
 		# @todo: Probably need to change this as we want different input and output parameters?
 		# Right now the compiler will generate the bytes based on the input parameters anyways,
-		# and the `to_file` method just dumps the bytes that have generated already...
+		# and the `to_file` method just dumps the bytes that have been generated already...
 		self.params = {
 			'game': GameVersion.NONE,
 			'debug': False
@@ -612,7 +609,7 @@ class QB:
 		# if we are currently parsing tokens inside a script
 		parsing_script = False
 		# the name/checksum of the current script...
-		current_script_name = None
+		current_script = None
 		# for keeping track of open loops
 		loop_count = 0
 		# for keeping track of open parentheses
@@ -699,7 +696,7 @@ class QB:
 					raise error.InvalidFormatError(F"Expected script name token `{TokenType.NAME}` but found `{next_token['type']}`...")
 
 				parsing_script = True
-				current_script_name = next_token['value']
+				current_script = next_token['value']
 				script_curly_count = curly_count
 				script_square_count = square_count
 				writer.write_uint8(TokenType.KEYWORD_SCRIPT.value)
@@ -708,7 +705,7 @@ class QB:
 				if not parsing_script:
 					error.print_token_error_message(current_token)
 					raise error.KeywordMismatchError("Unexpected `endscript` keyword without matching script at line...")
-				script_display_name = current_script_name.get_name()
+				script_display_name = current_script.get_name()
 				if loop_count > 0:
 					error.print_token_error_message(current_token)
 					raise error.KeywordMismatchError(F"Missing `repeat` keyword in script `{script_display_name}`")
@@ -724,7 +721,7 @@ class QB:
 						raise error.TokenMismatchError(F"Square bracket mismatch in script `{script_display_name}`")
 						script_square_count = 0
 				parsing_script = False
-				current_script_name = None
+				current_script = None
 				writer.write_uint8(TokenType.KEYWORD_ENDSCRIPT.value)
 
 			elif current_token_type is TokenType.KEYWORD_WHILE:
@@ -1119,11 +1116,25 @@ class QB:
 
 	# ---------------------------------------------------------------------------------------------
 	def to_struct(self, resolve=False, scope=None):
+		"""
+			resolve : bool
+				whether to recursively resolve struct references,
+				like the ncomps_ structs used in level nodearrays.
+				note that this will only search within the current scope,
+				so if you want to reference structs from other files,
+				you'll have to use the same shared scope QStruct...
+
+			scope : None|QStruct|QArray
+				this is the "root" node or context which holds all the elements,
+				you can consider the "root" of a file to be an implicit QStruct.
+				the scope can also be an QArray, and maybe eventually QScript...
+				passing None will create a new empty QStruct as the root node.
+		"""
 
 		script = False
 		assignment = False
 		keyname = None
-		
+
 		if scope is None:
 			scope = QStruct()
 
@@ -1211,18 +1222,23 @@ class QB:
 		return True
 
 
+# -------------------------------------------------------------------------------------------------
 # @todo: review all the builtin methods and operators
+# @todo: move this somewhere else!
 
 # -------------------------------------------------------------------------------------------------
 class QChecksumDatabase:
 
+	# singleton instance
 	_instance = None
 
 	# ---------------------------------------------------------------------------------------------
-	def __new__(cls):
+	def __new__(cls, clear=False):
 		if cls._instance is None:
 			cls._instance = super(QChecksumDatabase, cls).__new__(cls)
 			cls._instance.checksums = {}
+		if clear:
+			cls._instance.clear()
 		return cls._instance
 
 	# ---------------------------------------------------------------------------------------------
@@ -1256,23 +1272,20 @@ class QChecksumDatabase:
 # -------------------------------------------------------------------------------------------------
 class QChecksum:
 
-	# global database
-	_global_database = None
-
 	# ---------------------------------------------------------------------------------------------
 	def __init__(self, arg):
 
-		self.manager = QChecksumDatabase()
+		self.database = QChecksumDatabase()
 		self.checksum = None
 		self.name = None
 
 		if isinstance(arg, str):
 			self.name = arg
-			self.checksum = self.manager.get_checksum(arg)
+			self.checksum = self.database.get_checksum(arg)
 
 		elif isinstance(arg, int):
 			self.checksum = arg
-			self.name = self.manager.get_name(arg)
+			self.name = self.database.get_name(arg)
 
 		elif isinstance(arg, tuple) and len(arg) == 2:
 			self.checksum, self.name = qutils.resolve_checksum_tuple(arg)
@@ -1343,7 +1356,7 @@ class QComponent:
 
 	# ---------------------------------------------------------------------------------------------
 	def __hash__(self):
-		# required for this type to appear in sets
+		# @hack: return something unique so that this type can appear in sets...
 		return id(self)
 
 	# ---------------------------------------------------------------------------------------------
