@@ -1,10 +1,12 @@
-import sys
 import os
+import sys
 import argparse
-import thps_formats.encoding.lzss as lzss
+import traceback
 from pathlib import Path
 
+import thps_formats.encoding.lzss as lzss
 from thps_formats.utils.writer import BinaryWriter
+from thps_formats.utils.reader import BinaryReader
 from thps_formats.scripting2.crc32 import crc32_generate
 
 
@@ -35,7 +37,44 @@ def parse_build_file(input_file_path):
 
 
 # ------------------------------------------------------------------------------
-def generate_container_file(output_file_path, package_files, args):
+def extract_package_files(package_path, output_path, args):
+    with open(package_path, 'rb') as inp:
+        reader = BinaryReader(inp)
+
+        package_size = reader.read_uint32()
+        package_version = reader.read_uint32()
+        file_count = reader.read_uint32()
+
+        for _ in range(file_count):
+            data_size = reader.read_uint32()
+            compressed_size = reader.read_uint32()
+            file_path_length = reader.read_uint32()
+            file_path_checksum = reader.read_uint32()
+            file_path = reader.read_bytes(file_path_length).decode('utf-8', 'ignore').split('\x00', 1)[0]
+
+            if compressed_size == 0:
+                file_data = reader.read_bytes(data_size)
+            else:
+                file_data = lzss.decompress(reader.read_bytes(compressed_size))
+
+            padding = (4 - (reader.stream.tell() % 4)) % 4
+            if padding != 0:
+                reader.seek(padding, os.SEEK_CUR)
+
+            output_file_path = Path(output_path) / file_path
+            output_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if compressed_size == 0:
+                print(F"--- [{package_path.stem}] extracting uncompressed file at {output_file_path}")
+            else:
+                print(F"--- [{package_path.stem}] extracting compressed file at {output_file_path}")
+
+            with open(output_file_path, 'wb') as out:
+                out.write(file_data)
+
+
+# ------------------------------------------------------------------------------
+def create_package_file(output_file_path, package_files, args):
 
     with open(output_file_path, 'wb') as out:
         writer = BinaryWriter(out)
@@ -90,7 +129,54 @@ def generate_container_file(output_file_path, package_files, args):
 
 
 # ------------------------------------------------------------------------------
+def preunpack(args):
+
+    # --------------------------------------------------------------------------
+    packages = []
+
+    # --------------------------------------------------------------------------
+    if not args.input:
+        raise Exception('No input file or directory specified!')
+
+    # --------------------------------------------------------------------------
+    if not args.output:
+        raise Exception('No output file or directory specified!')
+
+    # --------------------------------------------------------------------------
+    # check if the input argument is a file name (prx file)
+    input_file_path = Path(args.input).resolve()
+    if '.' in input_file_path.name or input_file_path.is_file():
+        if not input_file_path.exists():
+            raise Exception('The input file does not exist!')
+        packages.append(input_file_path.resolve())
+    else:
+        # check if the input argument is a directory
+        if not input_file_path.exists():
+            raise Exception('The input directory does not exist!')
+        if not input_file_path.is_dir():
+            raise Exception('The input directory does not exist!')
+        for input_file_name in input_file_path.rglob('*.prx'):
+            if input_file_name.is_file():
+                packages.append(input_file_name.resolve())
+
+    # --------------------------------------------------------------------------
+    output_path = Path(args.output).resolve()
+    if not output_path.exists():
+        raise Exception('The output directory does not exist!')
+    if not output_path.is_dir():
+        raise Exception('Please specify an output directory!')
+
+    # --------------------------------------------------------------------------
+    # generate the container file
+    for package in packages:
+        extract_package_files(package, output_path, args)
+
+
+# ------------------------------------------------------------------------------
 def prepack(args):
+
+    if args.unpack:
+        return preunpack(args)
 
     package_files = []
 
@@ -163,7 +249,7 @@ def prepack(args):
             return
 
     # generate the container file
-    generate_container_file(output_file_path, package_files, args)
+    create_package_file(output_file_path, package_files, args)
 
 
 # ------------------------------------------------------------------------------
@@ -175,13 +261,17 @@ if __name__ == '__main__':
     parser.add_argument('--thugpro', action='store_true', help='deal with source/output relative paths in build files')
     parser.add_argument('--cache', action='store_true', help='only compress files that have changed since last package')
     parser.add_argument('--debug', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--unpack', action='store_true', help=argparse.SUPPRESS) # undocumented
     _args = parser.parse_args()
     try:
         prepack(_args)
         sys.exit(0)
-    except Exception as e:
-        print(e)
+    except Exception:
+        traceback.print_exc(limit=2, file=sys.stdout)
         sys.exit(1)
 
 # $ prepack build.txt --output path/pre/ --compress --thugpro
 # $ prepack source/ --output path/pre/package.prx
+
+# $ prepack data/pre/ --output data/ --unpack
+# $ prepack data/pre/qb_scripts.prx --output data/ --unpack
