@@ -1,6 +1,6 @@
 [project]
 name = "thps_formats"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Python library for working with file formats used in the Tony Hawk's Pro Skater game series"
 authors = [{name = "MK"}]
 license = {text = "MIT"}
@@ -11,6 +11,7 @@ dependencies = [
     "pillow",
     "pypng",
     "semver",
+    "pylzss",
 ]
 
 [build-system]
