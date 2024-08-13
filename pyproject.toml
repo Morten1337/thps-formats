@@ -10,8 +10,9 @@ dependencies = [
     "xmltodict",
     "pillow",
     "pypng",
+    "semver",
 ]
 
 [build-system]
-requires = ["setuptools", "wheel", "pyinstaller", "pytest"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"

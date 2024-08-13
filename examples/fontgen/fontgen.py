@@ -1,8 +1,6 @@
-import os
 import sys
 import argparse
 from pathlib import Path
-#sys.path.insert(0, os.path.abspath('../../'))
 from thps_formats.graphics.font import Font
 
 

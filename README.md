@@ -1,6 +1,7 @@
 # thps-formats
 
-A Python library for working with file formats used in the Tony Hawk's Pro Skater game series. It provides an essential set of tools for parsing, manipulating, and analyzing game data.
+A Python library for working with file formats used in the Tony Hawk's Pro Skater game series. The library aims to provide a basic set of tools for parsing, manipulating, and analyzing game data.
+It also serves as a consolidation and documentation of old code I have lying around, which I intend to port to Python.
 
 ## installing/building for development
 ```shell
