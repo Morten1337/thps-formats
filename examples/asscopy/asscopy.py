@@ -13,16 +13,12 @@ def parse_assets_file(assets_file):
             if not cleaned_line:
                 continue
             file_name = Path(cleaned_line)
-            if not file_name.resolve().is_file():
-                raise Exception(F"Couldn't find the file with name! {file_name}")
             assets.append(file_name)
     return assets
 
 
 # ------------------------------------------------------------------------------
 def copy(args):
-
-    assets = []
 
     if not args.input:
         raise Exception('No input file or directory specified!')
@@ -34,17 +30,24 @@ def copy(args):
     output_path = Path(args.output).resolve()
     source_path = Path().cwd().resolve()
 
-    assets.extend(parse_assets_file(assets_file))
+    assets = parse_assets_file(assets_file)
 
     for asset in assets:
-        output_file = output_path / asset
         source_file = source_path / asset
+        if not source_file.is_file():
+            print(f"Warning: Couldn't find the file! {source_file}")
+            continue
+
+        relative_path = asset.relative_to('source')
+        output_file = output_path / relative_path
         output_file.parent.mkdir(exist_ok=True, parents=True)
         try:
-            print(F"Copying file '{asset}'")
+            print(f"Copying file '{source_file}' to '{output_file}'")
             shutil.copyfile(source_file, output_file)
         except shutil.SameFileError:
             pass
+        except Exception as e:
+            print(f"Error copying '{source_file}': {e}")
 
 
 # ------------------------------------------------------------------------------
