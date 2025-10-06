@@ -1,9 +1,9 @@
 @ECHO OFF
 SETLOCAL ENABLEDELAYEDEXPANSION
 
-ECHO ============================================
-ECHO Building all example tools
-ECHO ============================================
+ECHO --------------------------------------------------------------------
+ECHO building all example tools
+ECHO --------------------------------------------------------------------
 ECHO.
 
 SET APPS=qcompy prepack fontgen asscopy runmenow
@@ -11,35 +11,28 @@ SET FAILED=
 
 FOR %%A IN (%APPS%) DO (
     ECHO.
-    ECHO ----------------------------------------
-    ECHO Building %%A...
-    ECHO ----------------------------------------
+    ECHO --------------------------------------------------------------------
+    ECHO building %%A...
+    ECHO --------------------------------------------------------------------
     CALL %%A\build.bat
     IF ERRORLEVEL 1 (
-        ECHO [ERROR] Failed to build %%A
+        ECHO [error] failed to build %%A
         SET FAILED=!FAILED! %%A
     ) ELSE (
-        ECHO [SUCCESS] %%A built successfully
+        ECHO [success] %%A built successfully
     )
 )
 
 ECHO.
-ECHO ============================================
-ECHO Build Summary
-ECHO ============================================
+ECHO --------------------------------------------------------------------
+ECHO build summary
+ECHO --------------------------------------------------------------------
 
 IF DEFINED FAILED (
-    ECHO Failed builds:%FAILED%
+    ECHO failed builds:%FAILED%
     EXIT /B 1
 ) ELSE (
-    ECHO All builds completed successfully!
-    ECHO.
-    ECHO Executables are located in each app's dist\ folder:
-    FOR %%A IN (%APPS%) DO (
-        IF EXIST %%A\dist\%%A.exe (
-            ECHO   - %%A\dist\%%A.exe
-        )
-    )
+    ECHO all builds completed successfully!
 )
 
 ENDLOCAL

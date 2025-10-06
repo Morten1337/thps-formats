@@ -5,16 +5,15 @@ Here are some example tools using the `thps-formats` library. These are mainly r
 - [uv](https://github.com/astral-sh/uv)
 
 ## building
-Each tool can be built independently using its own `build.bat` script:
 
 ```shell
 # build a single tool
 cd qcompy
-build.bat
+sh build.sh
 
 # or build all tools at once
 cd examples
-build-all.bat
+sh build-all.sh
 ```
 
 ## tools
