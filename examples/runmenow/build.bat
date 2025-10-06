@@ -1,8 +1,26 @@
 @ECHO OFF
+SETLOCAL
+cd /d %~dp0
 
-SETLOCAL ENABLEDELAYEDEXPANSION
-IF NOT DEFINED THUGPRO_TOOLS_PATH (
-	SET THUGPRO_TOOLS_PATH=D:\Repos\thugpro-tools
+ECHO Building runmenow...
+
+REM Build with PyInstaller using uv (noconsole for background process)
+cd ..\..
+uv run --with pyinstaller --with pywin32 ^
+  pyinstaller --onefile --clean --noconfirm ^
+  --paths . ^
+  --noconsole ^
+  --icon=%~dp0runmenow.ico ^
+  --name=runmenow ^
+  --distpath=%~dp0dist ^
+  --workpath=%~dp0build ^
+  --specpath=%~dp0 ^
+  %~dp0runmenow.py
+
+IF %ERRORLEVEL% NEQ 0 (
+    ECHO Build failed!
+    EXIT /B 1
 )
-pyinstaller runmenow.py --paths ../../ --noconfirm --onefile --noconsole --clean --icon=runmenow.ico --upx-dir="D:/Tools/upx-4.2.4-win64"
-COPY dist\runmenow.exe %THUGPRO_TOOLS_PATH%
+
+ECHO Build complete: examples\runmenow\dist\runmenow.exe
+ENDLOCAL
