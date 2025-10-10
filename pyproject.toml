@@ -4,7 +4,7 @@ version = "0.3.0"
 description = "A Python library for working with file formats used in the Tony Hawk's Pro Skater game series"
 authors = [{name = "MK"}]
 license = {text = "MIT"}
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "colorama",
     "xmltodict",
@@ -21,7 +21,7 @@ build = [
 ]
 
 [build-system]
-requires = ["setuptools", "wheel", "pybind11"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [dependency-groups]
