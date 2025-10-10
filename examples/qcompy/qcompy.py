@@ -6,6 +6,9 @@ from thps_formats.shared.enums import GameVersion
 
 
 # ------------------------------------------------------------------------------
+QCOMPY_VERSION_NUMBER = (1,0)
+
+# ------------------------------------------------------------------------------
 def parse_defines_from_file(filename):
     defines = []
     definespath = Path(filename).resolve()
@@ -27,6 +30,10 @@ def compile(args):
         'debug': args.debug,
         'game': GameVersion.THUGPRO_WIN
     }
+
+    if args.version:
+        print(F"qcompy v{QCOMPY_VERSION_NUMBER[0]}.{QCOMPY_VERSION_NUMBER[1]}")
+        return
 
     if not args.input:
         raise Exception('No input script file name or directory specified!')
@@ -94,6 +101,7 @@ if __name__ == '__main__':
     parser.add_argument('--defines', metavar='DEVELOPER,FOO [defines.txt]', type=str, help='directive name defines comma separated')
     parser.add_argument('--debug', action='store_true', help='include debug information')
     parser.add_argument('--cache', action='store_true', help='only compile files that have changed since last compile')
+    parser.add_argument('--version', action='store_true', help='print the current version number')
     args = parser.parse_args()
     try:
         compile(args)
