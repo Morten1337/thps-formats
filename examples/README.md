@@ -8,12 +8,9 @@ Here are some example tools using the `thps-formats` library. These are mainly r
 
 ```shell
 # build a single tool
-cd qcompy
-sh build.sh
-
+sh qcompy/build.sh
 # or build all tools at once
-cd examples
-sh build-all.sh
+sh build.sh
 ```
 
 ## tools
