@@ -581,8 +581,6 @@ class QB:
 				source = LineIterator(pathname, qb.params['encoding'])
 				qb.compile(source)
 			except Exception as exeption:
-				print(f"motherfucker: {exeption}")
-				print(f"{params}")
 				raise exeption
 		return qb
 
