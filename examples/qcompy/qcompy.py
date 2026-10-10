@@ -27,6 +27,7 @@ def parse_defines_from_file(filename):
 # ------------------------------------------------------------------------------
 def compile(args):
     params = {
+        'encoding': args.encoding,
         'debug': args.debug,
         'game': GameVersion.THUGPRO_WIN
     }
@@ -102,6 +103,8 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', help='include debug information')
     parser.add_argument('--cache', action='store_true', help='only compile files that have changed since last compile')
     parser.add_argument('--version', action='store_true', help='print the current version number')
+    parser.add_argument('--encoding', metavar="utf-8/windows-1252/other", type=str, default="windows-1252", help="the encoding used for reading text files")
+
     args = parser.parse_args()
     try:
         compile(args)
