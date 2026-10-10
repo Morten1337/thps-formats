@@ -668,7 +668,7 @@ class QB:
 				includepath = Path(token['value']).resolve()
 				if includepath.is_file():
 					print(F"{Fore.GREEN}Including file '{includepath}'{Style.RESET_ALL}")
-					includesource = LineIterator(includepath)
+					includesource = LineIterator(includepath, self.params['encoding'])
 					includeiterator = QTokenIterator(includesource, self.defines, level=1)
 					# include all the new tokens in the list! assuming the tokenizer didn't fail...
 					self.tokens.extend(includeiterator)
