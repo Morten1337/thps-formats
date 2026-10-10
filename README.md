@@ -7,12 +7,12 @@ But as of now, it's mostly full of incomplete random garbage. However, the q scr
 
 ## installing/building for development
 ```shell
-$ python -m pip install -e .
+$ uv sync
 ```
 
 ## running tests
 ```shell
-$ python -m pytest tests/
+$ uv run pytest tests/
 ```
 
 ## future

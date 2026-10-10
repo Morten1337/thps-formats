@@ -163,12 +163,13 @@ class StringLineIterator:
 class LineIterator:
 
 	# ---------------------------------------------------------------------------------------------
-	def __init__(self, pathname):
+	def __init__(self, pathname, encoding):
 		self.pathname = pathname
+		self.encoding = encoding
 
 	# ---------------------------------------------------------------------------------------------
 	def __iter__(self):
-		with open(self.pathname, 'r') as file:
+		with open(self.pathname, 'r', encoding=self.encoding) as file:
 			for index, line in enumerate(file):
 				yield index, line
 
@@ -406,6 +407,14 @@ class QTokenIterator:
 
 					elif kind == 'INTERNAL_INCLUDE':
 						token_type, token_value = (TokenType.INTERNAL_INCLUDE, value.split(' ')[1].replace('"', ''))
+
+						# Hardronix: replace backward slahes with forward ones and vice versa depending on a platform
+						if os.sep == '/':
+						    token_value = token_value.replace("\\", "/")
+
+						if os.sep == '\\':
+						    token_value = token_value.replace("/", "\\")
+
 						if self.level > 0:
 							includepath = Path(token_value).resolve()
 							error.print_warning_message(F"Only one level of file inclusion supported. Skipping '{includepath}'")
@@ -569,10 +578,9 @@ class QB:
 			raise NotImplementedError('Loading QB scripts is not supported yet...')
 		elif extension == 'q':
 			try:
-				source = LineIterator(pathname)
+				source = LineIterator(pathname, qb.params['encoding'])
 				qb.compile(source)
 			except Exception as exeption:
-				print(exeption)
 				raise exeption
 		return qb
 
@@ -660,7 +668,7 @@ class QB:
 				includepath = Path(token['value']).resolve()
 				if includepath.is_file():
 					print(F"{Fore.GREEN}Including file '{includepath}'{Style.RESET_ALL}")
-					includesource = LineIterator(includepath)
+					includesource = LineIterator(includepath, self.params['encoding'])
 					includeiterator = QTokenIterator(includesource, self.defines, level=1)
 					# include all the new tokens in the list! assuming the tokenizer didn't fail...
 					self.tokens.extend(includeiterator)

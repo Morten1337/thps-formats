@@ -11,6 +11,9 @@ from thps_formats.scripting2.crc32 import crc32_generate
 
 
 # ------------------------------------------------------------------------------
+PREPACK_VERSION_NUMBER = (1,0)
+
+# ------------------------------------------------------------------------------
 def get_relative_path(file_path, base_paths):
     for base_path in base_paths:
         try:
@@ -175,6 +178,10 @@ def preunpack(args):
 # ------------------------------------------------------------------------------
 def prepack(args):
 
+    if args.version:
+        print(F"prepack v{PREPACK_VERSION_NUMBER[0]}.{PREPACK_VERSION_NUMBER[1]}")
+        return
+
     if args.unpack:
         return preunpack(args)
 
@@ -262,6 +269,7 @@ if __name__ == '__main__':
     parser.add_argument('--cache', action='store_true', help='only compress files that have changed since last package')
     parser.add_argument('--debug', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--unpack', action='store_true', help=argparse.SUPPRESS) # undocumented
+    parser.add_argument('--version', action='store_true', help='print the current version number')
     _args = parser.parse_args()
     try:
         prepack(_args)

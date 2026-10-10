@@ -1,4 +1,0 @@
-pyinstaller
-xmltodict
-Pillow
-pypng
